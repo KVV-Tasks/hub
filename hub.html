@@ -745,6 +745,7 @@ function submitForm(){
   if(rep==='wd'&&!wdays.length){toast('Отметьте дни недели для повтора');return}
   if(rep&&!due){toast('Для повтора нужен срок');$('fDue').focus();return}
   const m=me();let by,to;if(dir==='out'){by=m;to=[from,...extraTo].filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i).join(', ')}else{by=from;to=editKeepTo!==null?editKeepTo:m}
+  if(cloud.user&&dir==='out'&&toList(to).some(n=>!cloudUid(n)))cloudProfiles().then(()=>{const bad=toList(to).filter(n=>!cloudUid(n));if(bad.length)showErr('⚠ Нет в команде: '+bad.join(', ')+'. Задача записана, но этим людям не видна — исправьте имя как в базе');else cloudPush()});
   if(editId){const t=byId(editId);if(t){Object.assign(t,{text,by,to,due,time,rep,wdays,link,prio});touch(t)}toast('Задача обновлена')}
   else{tasks.unshift(norm({id:Date.now(),updBy:me(),text,by,to,due,time,rep,wdays,link,prio,done:false,created:today(),upd:Date.now()}));toast('Записано')}
   save();resetForm();render();$('fText').focus();
@@ -1141,6 +1142,7 @@ async function cloudInit(){
   renderStorage();renderSettings();
   window.addEventListener('online',()=>{if(cloud.user)cloudLoad()});
   setInterval(()=>{if(cloudOn()&&LS.get('hub.cloud.dirty')==='1')cloudPushNow()},60000);
+  setInterval(()=>{if(cloud.user)cloudProfiles().then(()=>{renderSettings();render()})},300000);
 }
 async function cloudLogin(){
   let login=($('cLogin').value||'').trim(),pass=$('cPass').value||'';
@@ -1156,6 +1158,8 @@ async function cloudLogin(){
 async function cloudLogout(){if(!cloud.sb)return;if(!confirm('Выйти из общей базы? Задачи останутся в этом браузере, но перестанут обновляться.'))return;await cloud.sb.auth.signOut();cloudReset();renderStorage();renderSettings();render();toast('Вышли')}
 function cloudReset(){if(cloud.chan){try{cloud.sb.removeChannel(cloud.chan)}catch(e){}cloud.chan=null}cloud.user=null;cloud.name='';cloud.role='';cloud.profiles=[];cloud.state='off';cloud.err=''}
 
+async function cloudProfiles(){try{const pr=await cloud.sb.from('profiles').select('id,name,role');if(pr.error)return false;cloud.profiles=pr.data||[];
+  const meP=cloud.profiles.find(p=>p.id===cloud.user.id);if(meP){cloud.name=meP.name;cloud.role=meP.role;if(S.me!==cloud.name){S.me=cloud.name;saveS()}}return true}catch(e){return false}}
 async function cloudLoad(){
   try{
     const sb=cloud.sb;
@@ -1218,7 +1222,9 @@ async function cloudPushNow(){
   if(!cloud.user||cloud.busy||!cloud.sb)return;cloud.busy=true;
   try{
     const rows=[];
-    tasks.forEach(t=>{const k=String(t.id);if((t.upd||0)>(cloud.pushed[k]||0))rows.push(cloudTaskToRow(t))});
+    const pend=tasks.filter(t=>(t.upd||0)>(cloud.pushed[String(t.id)]||0));
+    if(pend.some(t=>[...toList(t.to),t.by].some(n=>n&&!cloudUid(n))))await cloudProfiles(); // имя не найдено — возможно, людей переименовали
+    pend.forEach(t=>rows.push(cloudTaskToRow(t)));
     trash.forEach(d=>{const k=String(d.id);const u=Math.max(d.upd||0,d.deletedAt||0);if(u>(cloud.pushed[k]||0))rows.push(cloudTaskToRow(d,d.deletedAt||u))});
     const srows=[];const seen=new Set();
     [['contact',contacts],['link',links],['template',templates]].forEach(([kind,arr])=>{arr.forEach(x=>{const k=kind+':'+x.id;seen.add(k);if((x.upd||0)>(cloud.pushedS[k]||0))srows.push(cloudSharedRow(kind,x))})});

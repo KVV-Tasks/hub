@@ -218,6 +218,7 @@ function notifyChange(o,t){
 }
 async function push(t,del){
   // существующую задачу обновляем (сотрудник имеет право менять свои), новую — вставляем
+  if([...toList(t.to),t.by].some(n=>n&&!uidOf(n))){const pr=await sb.from('profiles').select('id,name,role');if(!pr.error)profiles=pr.data||[]} // людей могли переименовать
   const row=taskToRow(t,del);
   let {data,error}=await sb.from('tasks').update(row).eq('id',row.id).select('id');
   if(!error&&!(data&&data.length)){const r=await sb.from('tasks').insert(row);error=r.error;if(error&&error.code==='23505')error=null}
