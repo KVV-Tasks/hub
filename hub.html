@@ -746,14 +746,14 @@ function submitForm(){
   if(rep&&!due){toast('Для повтора нужен срок');$('fDue').focus();return}
   const m=me();let by,to;if(dir==='out'){by=m;to=[from,...extraTo].filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i).join(', ')}else{by=from;to=editKeepTo!==null?editKeepTo:m}
   if(cloud.user&&dir==='out'&&toList(to).some(n=>!cloudUid(n)))cloudProfiles().then(()=>{const bad=toList(to).filter(n=>!cloudUid(n));if(bad.length)showErr('⚠ Нет в команде: '+bad.join(', ')+'. Задача записана, но этим людям не видна — исправьте имя как в базе');else cloudPush()});
-  if(editId){const t=byId(editId);if(t){Object.assign(t,{text,by,to,due,time,rep,wdays,link,prio});touch(t)}toast('Задача обновлена')}
+  if(editId){const t=byId(editId);if(t){if(cloud.user&&cloud.role!=='admin'&&t.by&&t.by!==m){Object.assign(t,{due,time});toast('Чужая задача: изменены только срок и время')}else{Object.assign(t,{text,by,to,due,time,rep,wdays,link,prio});toast('Задача обновлена')}touch(t)}}
   else{tasks.unshift(norm({id:Date.now(),updBy:me(),text,by,to,due,time,rep,wdays,link,prio,done:false,created:today(),upd:Date.now()}));toast('Записано')}
   save();resetForm();render();$('fText').focus();
 }
-function resetForm(){editId=null;editKeepTo=null;extraTo=[];renderToChips();$('fToAdd').value='';$('fText').value='';$('fFrom').value='';$('fTime').value='';$('fLink').value='';$('fDue').value=today();renderTpl();$('phint').textContent='';setRepVal('');
+function resetForm(){editId=null;editKeepTo=null;extraTo=[];$('fText').readOnly=false;$('fFrom').readOnly=false;renderToChips();$('fToAdd').value='';$('fText').value='';$('fFrom').value='';$('fTime').value='';$('fLink').value='';$('fDue').value=today();renderTpl();$('phint').textContent='';setRepVal('');
   touched={due:false,time:false,from:false};setWd([]);repChanged();toggleLinkField(false);setDir(document.querySelector('#fDir button[data-d="in"]'));
   setPrio(document.querySelector('#fPrio button[data-p="0"]'));$('fTitle').textContent='Новая задача';$('fSubmit').textContent='▶ Записать';$('fCancel').hidden=true;offCheck()}
-function edit(id){const t=byId(id);if(!t)return;editId=id;const r=rel(t);editKeepTo=r.dir==='other'?t.to:null;$('fText').value=t.text;if(r.dir==='out'){const L=toList(t.to);$('fFrom').value=L[0]||'';extraTo=L.slice(1)}else{$('fFrom').value=r.from;extraTo=[]}renderToChips();$('fDue').value=t.due;$('fTime').value=t.time||'';setRepVal(t.rep||'');$('fLink').value=t.link||'';
+function edit(id){const t=byId(id);if(!t)return;editId=id;const r=rel(t);const lim=!!(cloud.user&&cloud.role!=='admin'&&t.by&&t.by!==me());$('fText').readOnly=lim;$('fFrom').readOnly=lim;if(lim)toast('Задача от '+t.by+': можно изменить только срок и время');editKeepTo=r.dir==='other'?t.to:null;$('fText').value=t.text;if(r.dir==='out'){const L=toList(t.to);$('fFrom').value=L[0]||'';extraTo=L.slice(1)}else{$('fFrom').value=r.from;extraTo=[]}renderToChips();$('fDue').value=t.due;$('fTime').value=t.time||'';setRepVal(t.rep||'');$('fLink').value=t.link||'';
   touched={due:true,time:true,from:true};setWd(t.wdays||[]);repChanged();toggleLinkField(!!t.link);setDir(document.querySelector('#fDir button[data-d="'+(r.dir==='out'?'out':'in')+'"]'));
   setPrio(document.querySelector('#fPrio button[data-p="'+(t.prio||0)+'"]'));$('fTitle').textContent='Правка задачи';$('fSubmit').textContent='✔ Сохранить';$('fCancel').hidden=false;$('phint').textContent='';offCheck();$('fText').focus()}
 $('fText').addEventListener('keydown',e=>{if(e.ctrlKey&&e.key==='Enter')submitForm()});
