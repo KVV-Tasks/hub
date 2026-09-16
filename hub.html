@@ -120,7 +120,8 @@ input[type=date],input[type=time]{color-scheme:dark}
 .selbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;border:1px dashed var(--warn);padding:6px 8px;margin-bottom:8px;font-size:10px;letter-spacing:1px;color:var(--warn)}
 .selbar b{color:#fff;font-weight:normal}.selbar button{width:auto;padding:2px 8px;font-size:10px;cursor:pointer;color:var(--txt)}.selbar input{width:130px;padding:2px 6px;font-size:11px}
 .task .selbox{width:auto;margin:0 8px 0 0;accent-color:var(--warn);vertical-align:middle}
-.task .tag{color:var(--vio);cursor:pointer}.task .tag:hover{text-decoration:underline}
+.task .tag{color:var(--vio);cursor:pointer}
+.fchips{display:flex;flex-wrap:wrap;gap:4px}.fchips:empty{display:none}.fchips span{border:1px solid var(--acc);color:var(--acc);border-radius:3px;padding:1px 7px;font-size:11px;cursor:pointer;white-space:nowrap}.fchips span:hover{color:var(--bad);border-color:var(--bad)}.task .tag:hover{text-decoration:underline}
 .task.nodue .bar{background:var(--dim);box-shadow:none}
 .task .steps div{display:flex;align-items:center;gap:6px;padding:2px 0}.task .steps div.d span{text-decoration:line-through;color:var(--dim)}.task .steps input{width:auto;accent-color:var(--ok)}.task .steps span{flex:1}.task .steps i{font-style:normal;color:var(--dim);cursor:pointer}.task .steps i:hover{color:var(--bad)}
 .task.trashed{opacity:.6;border-style:dotted}
@@ -347,8 +348,12 @@ kbd{border:1px solid var(--line);padding:1px 6px;font-size:10px;color:var(--neon
           <button data-d="in" class="on" onclick="setDir(this)">◀ МНЕ ПОРУЧИЛИ</button>
           <button data-d="out" onclick="setDir(this)">Я ПОРУЧИЛ ▶</button>
         </div>
-        <input id="fFrom" list="fromList" placeholder="Кто поставил / кому (несколько — через запятую)" style="margin-top:4px">
+        <input id="fFrom" list="fromList" placeholder="Заказчик / кто поставил" style="margin-top:4px">
         <datalist id="fromList"></datalist>
+        <div id="fMore" hidden style="margin-top:4px">
+          <div class="fchips" id="fToChips"></div>
+          <div class="row" style="align-items:center;gap:4px;margin-top:2px"><input id="fToAdd" list="fromList" placeholder="＋ ещё исполнитель… (Enter)" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();addTo()}" onchange="addTo()"><button class="btn sm" onclick="addTo()" title="Добавить исполнителя">＋</button></div>
+        </div>
         <div class="row">
           <div style="flex:1"><label>СРОК ИСПОЛНЕНИЯ</label><input id="fDue" type="date"></div>
           <div style="width:104px"><label>ВРЕМЯ</label><input id="fTime" type="time"></div>
@@ -709,7 +714,10 @@ function contactName(n){const c=contacts.find(c=>c.name===n);return c}
 
 /* ============ form ============ */
 $('fDue').value=today();
-let touched={due:false,time:false,from:false};let editKeepTo=null;
+let touched={due:false,time:false,from:false};let editKeepTo=null;let extraTo=[];
+function renderToChips(){const e=$('fToChips');if(!e)return;e.innerHTML=extraTo.map((n,i)=>`<span onclick="removeTo(${i})" title="Убрать">${esc(n)} ✖</span>`).join('')}
+function addTo(){const i=$('fToAdd');const v=(i.value||'').trim();if(!v)return;const first=($('fFrom').value||'').trim();if(v===first||extraTo.includes(v)){i.value='';return}extraTo.push(v);i.value='';renderToChips();i.focus()}
+function removeTo(i){extraTo.splice(i,1);renderToChips()}
 $('fDue').addEventListener('change',()=>{touched.due=true;offCheck()});$('fTime').addEventListener('change',()=>touched.time=true);$('fFrom').addEventListener('input',()=>touched.from=true);
 function noDue(){$('fDue').value='';$('fTime').value='';touched.due=true;touched.time=true;offCheck();toast('Срок снят — задача без срока')}
 function tplApply(id){const x=templates.find(x=>x.id===id);if(!x)return;$('fText').value=x.text||'';$('fFrom').value=x.from||'';setPrio(document.querySelector('#fPrio button[data-p="'+(x.prio||0)+'"]'));setRepVal(x.rep||'');setWd(x.wdays||[]);setDir(document.querySelector('#fDir button[data-d="'+(x.dir||'in')+'"]'));$('fLink').value=x.link||'';toggleLinkField(!!x.link);touched.from=true;$('tplPick').classList.remove('open');$('fText').focus()}
@@ -720,7 +728,7 @@ $('tplPick').addEventListener('click',e=>{if(e.target.closest('.list'))return;$(
 document.addEventListener('click',e=>{if(!e.target.closest('#tplPick'))$('tplPick').classList.remove('open')});
 function setPrio(b){document.querySelectorAll('#fPrio button').forEach(x=>x.classList.remove('on'));b.classList.add('on')}
 function getPrio(){return +document.querySelector('#fPrio button.on').dataset.p}
-function setDir(b){document.querySelectorAll('#fDir button').forEach(x=>x.classList.remove('on'));b.classList.add('on');$('fFrom').placeholder=b.dataset.d==='out'?'Кому поручил':'Заказчик / кто поставил'}
+function setDir(b){document.querySelectorAll('#fDir button').forEach(x=>x.classList.remove('on'));b.classList.add('on');const out=b.dataset.d==='out';$('fFrom').placeholder=out?'Кому поручил (первый исполнитель)':'Заказчик / кто поставил';$('fMore').hidden=!out}
 function getDir(){return document.querySelector('#fDir button.on').dataset.d}
 function setRep(b){document.querySelectorAll('#fRep button').forEach(x=>x.classList.remove('on'));b.classList.add('on');repChanged()}
 function getRep(){return document.querySelector('#fRep button.on').dataset.r}
@@ -736,15 +744,15 @@ function submitForm(){
   if(!text){$('fText').focus();return}
   if(rep==='wd'&&!wdays.length){toast('Отметьте дни недели для повтора');return}
   if(rep&&!due){toast('Для повтора нужен срок');$('fDue').focus();return}
-  const m=me();let by,to;if(dir==='out'){by=m;to=from}else{by=from;to=editKeepTo!==null?editKeepTo:m}
+  const m=me();let by,to;if(dir==='out'){by=m;to=[from,...extraTo].filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i).join(', ')}else{by=from;to=editKeepTo!==null?editKeepTo:m}
   if(editId){const t=byId(editId);if(t){Object.assign(t,{text,by,to,due,time,rep,wdays,link,prio});touch(t)}toast('Задача обновлена')}
   else{tasks.unshift(norm({id:Date.now(),updBy:me(),text,by,to,due,time,rep,wdays,link,prio,done:false,created:today(),upd:Date.now()}));toast('Записано')}
   save();resetForm();render();$('fText').focus();
 }
-function resetForm(){editId=null;editKeepTo=null;$('fText').value='';$('fFrom').value='';$('fTime').value='';$('fLink').value='';$('fDue').value=today();renderTpl();$('phint').textContent='';setRepVal('');
+function resetForm(){editId=null;editKeepTo=null;extraTo=[];renderToChips();$('fToAdd').value='';$('fText').value='';$('fFrom').value='';$('fTime').value='';$('fLink').value='';$('fDue').value=today();renderTpl();$('phint').textContent='';setRepVal('');
   touched={due:false,time:false,from:false};setWd([]);repChanged();toggleLinkField(false);setDir(document.querySelector('#fDir button[data-d="in"]'));
   setPrio(document.querySelector('#fPrio button[data-p="0"]'));$('fTitle').textContent='Новая задача';$('fSubmit').textContent='▶ Записать';$('fCancel').hidden=true;offCheck()}
-function edit(id){const t=byId(id);if(!t)return;editId=id;const r=rel(t);editKeepTo=r.dir==='other'?t.to:null;$('fText').value=t.text;$('fFrom').value=r.from;$('fDue').value=t.due;$('fTime').value=t.time||'';setRepVal(t.rep||'');$('fLink').value=t.link||'';
+function edit(id){const t=byId(id);if(!t)return;editId=id;const r=rel(t);editKeepTo=r.dir==='other'?t.to:null;$('fText').value=t.text;if(r.dir==='out'){const L=toList(t.to);$('fFrom').value=L[0]||'';extraTo=L.slice(1)}else{$('fFrom').value=r.from;extraTo=[]}renderToChips();$('fDue').value=t.due;$('fTime').value=t.time||'';setRepVal(t.rep||'');$('fLink').value=t.link||'';
   touched={due:true,time:true,from:true};setWd(t.wdays||[]);repChanged();toggleLinkField(!!t.link);setDir(document.querySelector('#fDir button[data-d="'+(r.dir==='out'?'out':'in')+'"]'));
   setPrio(document.querySelector('#fPrio button[data-p="'+(t.prio||0)+'"]'));$('fTitle').textContent='Правка задачи';$('fSubmit').textContent='✔ Сохранить';$('fCancel').hidden=false;$('phint').textContent='';offCheck();$('fText').focus()}
 $('fText').addEventListener('keydown',e=>{if(e.ctrlKey&&e.key==='Enter')submitForm()});
