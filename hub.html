@@ -825,7 +825,7 @@ function searchTag(tag){$('q').value='#'+tag;render()}
 function taskText(t){return ['ЗАДАЧА: '+t.text,'Срок: '+fmt(t.due)+(t.time?' '+t.time:''),whoStr(t),t.done?'Выполнено: '+fmt(t.doneAt||t.due)+(t.doneBy?' ('+t.doneBy+')':''):'',t.prio?'Приоритет: '+PRIO[t.prio]:'',t.link?'Ссылка: '+t.link:'',...(t.steps.length?['Чек-лист:',...t.steps.map(s=>' ['+(s.done?'x':' ')+'] '+s.t)]:[]),...(t.notes.length?['Заметки:',...t.notes.map(n=>' '+fmtDT(n.d)+' '+n.t)]:[])].filter(Boolean).join('\n')}
 function copyTask(id){copyText(taskText(byId(id))).then(()=>toast('Задача скопирована как текст'))}
 function toTrash(t){t.deletedAt=Date.now();t.deletedBy=me();trash.push(t);tasks=tasks.filter(x=>x.id!==t.id);if(openId===t.id)openId=null;if(editId===t.id)resetForm();selected.delete(t.id)}
-function canDel(t){if(S.strict&&me()&&t.by&&t.by!==me()){toast('Удалить может только автор: '+t.by);return false}return true}
+function canDel(t){const strict=S.strict||(cloud.user&&cloud.role!=='admin');if(strict&&me()&&t.by&&t.by!==me()){toast('Удалить может только автор: '+t.by+(cloud.user?' или руководитель':''));return false}return true}
 function del(id){const t=byId(id);if(!t)return;if(!canDel(t))return;toTrash(t);save();render();toast('Задача в корзине',{label:'ОТМЕНИТЬ',fn:undo})}
 function restoreTask(id){const t=trash.find(x=>x.id===id);if(!t)return;trash=trash.filter(x=>x.id!==id);delete t.deletedAt;touch(t);tasks.unshift(norm(t));save();render();toast('Восстановлено')}
 function purgeTrash(id){if(id){if(!confirm('Удалить навсегда?'))return;trash=trash.filter(x=>x.id!==id)}else{if(!confirm('Очистить корзину ('+trash.length+')?'))return;trash=[]}save();render()}
