@@ -140,6 +140,8 @@ input[type=date],input[type=time]{color-scheme:dark}
 .task.p1 .pb.pr{color:var(--imp);border-color:var(--imp)} .task.p2 .pb.pr{color:var(--bad);border-color:var(--bad);text-shadow:0 0 6px var(--bad)}
 .task .pb.wait{color:var(--vio);border-color:var(--vio)}
 .task .pb.to{color:var(--neon);border-color:var(--neon)}
+.task .pb.nw{color:var(--acc);border-color:var(--acc);text-shadow:0 0 6px var(--acc)}
+.task .steps small{color:var(--dim);font-size:10px;margin-left:4px}.task .steps small.my{color:var(--acc)}
 .task.oth .meta b{color:var(--neon)}
 .seg.scope{display:inline-flex;gap:3px;margin-right:4px}
 .seg.scope button.on{color:var(--ok)!important;border-color:var(--ok)!important;box-shadow:0 0 8px rgba(56,232,160,.4)!important}
@@ -345,7 +347,7 @@ kbd{border:1px solid var(--line);padding:1px 6px;font-size:10px;color:var(--neon
           <button data-d="in" class="on" onclick="setDir(this)">◀ МНЕ ПОРУЧИЛИ</button>
           <button data-d="out" onclick="setDir(this)">Я ПОРУЧИЛ ▶</button>
         </div>
-        <input id="fFrom" list="fromList" placeholder="Заказчик / кто поставил" style="margin-top:4px">
+        <input id="fFrom" list="fromList" placeholder="Кто поставил / кому (несколько — через запятую)" style="margin-top:4px">
         <datalist id="fromList"></datalist>
         <div class="row">
           <div style="flex:1"><label>СРОК ИСПОЛНЕНИЯ</label><input id="fDue" type="date"></div>
@@ -488,7 +490,7 @@ kbd{border:1px solid var(--line);padding:1px 6px;font-size:10px;color:var(--neon
           <input id="cPass" type="password" placeholder="Пароль" autocomplete="current-password" style="flex:1;min-width:120px" onkeydown="if(event.key==='Enter')cloudLogin()">
           <button class="btn sm" id="cBtn" onclick="cloudLogin()">Войти</button>
         </div>
-        <div class="hint">Логин и пароль выдаёт руководитель. После входа задачи, заказчики, ссылки и шаблоны хранятся в общей базе: их видят коллеги с компьютеров и телефонов, изменения приходят сразу. Сотрудник видит задачи, где он исполнитель или автор; руководитель — все. Без связи панель работает как обычно и дошлёт изменения, когда связь появится.</div>
+        <div class="hint">Логин и пароль выдаёт администратор. После входа задачи, заказчики, ссылки и шаблоны хранятся в общей базе: их видят коллеги с компьютеров и телефонов, изменения приходят сразу. Сотрудник видит задачи, где он исполнитель или автор; руководитель — все. Без связи панель работает как обычно и дошлёт изменения, когда связь появится.</div>
       </div>
       <div id="cUserBox" hidden>
         <div class="row wrap" style="align-items:center">
@@ -620,14 +622,19 @@ let S=Object.assign({},DEF);try{Object.assign(S,JSON.parse(LS.get('hub.settings'
 if(LS.get('hub.warn')){S.warnDays=+LS.get('hub.warn')||2;LS.del('hub.warn')}
 const saveS=()=>LS.set('hub.settings',JSON.stringify(S));
 const me=()=>((typeof cloud!=='undefined'&&cloud.user&&cloud.name)||S.me||'').trim();
+const toList=s=>String(s||'').split(',').map(x=>x.trim()).filter(Boolean);const hasTo=(t,n)=>!!n&&toList(t.to).includes(n);
+let seenMap={};try{seenMap=JSON.parse(LS.get('hub.seen')||'null')}catch(e){seenMap=null}
+const isNew=t=>!!(seenMap&&t.updBy&&t.updBy!==me()&&(t.upd||0)>(seenMap[String(t.id)]||0));
+function markSeen(t){if(!seenMap)seenMap={};seenMap[String(t.id)]=Math.max(seenMap[String(t.id)]||0,t.upd||0);LS.set('hub.seen',JSON.stringify(seenMap))}
+function seedSeen(){if(seenMap)return;seenMap={};tasks.forEach(t=>seenMap[String(t.id)]=t.upd||0);LS.set('hub.seen',JSON.stringify(seenMap))}
 
 /* ============ data ============ */
 function norm(t){const o=Object.assign({due:'',time:'',rep:'',wdays:[],prio:0,link:'',notes:[],steps:[],done:false},t);
   if(o.by===undefined||o.to===undefined){const f=o.from||'';if(o.dir==='out'){if(o.by===undefined)o.by=me();if(o.to===undefined)o.to=f}else{if(o.by===undefined)o.by=f;if(o.to===undefined)o.to=me()}}
   delete o.from;delete o.dir;o.by=o.by||'';o.to=o.to||'';if(!Array.isArray(o.steps))o.steps=[];if(!o.due)o.due='';if(!o.upd)o.upd=o.id||0;if(!Array.isArray(o.notes))o.notes=[];if(!Array.isArray(o.wdays))o.wdays=[];if(!o.created)o.created=today();return o}
-function rel(t){const m=me(),by=t.by||'',to=t.to||'';if(to===m)return {dir:'in',from:by,to};if(by===m)return {dir:'out',from:to,to};return {dir:'other',from:by,to}}
+function rel(t){const m=me(),by=t.by||'',to=t.to||'';const L=toList(to);if(L.includes(m)&&!(by===m&&L.length>1))return {dir:'in',from:by,to};if(by===m)return {dir:'out',from:to,to};return {dir:'other',from:by,to}}
 function whoStr(t){const r=rel(t);if(r.dir==='in')return r.from?'от: '+r.from:'';if(r.dir==='out')return 'кому: '+(r.to||'—');return (r.from?'от: '+r.from+' ':'')+'кому: '+(r.to||'—')}
-function inScope(t){const m=me();if(!m||S.scope==='all')return true;return t.to===m||t.by===m}
+function inScope(t){const m=me();if(!m||S.scope==='all')return true;return hasTo(t,m)||t.by===m}
 function setScope(x){S.scope=x;saveS();updScope();render()}
 function updScope(){const m=me();$('scopeSeg').hidden=!m;document.querySelectorAll('#scopeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.s===(S.scope||'mine')));$('meTag').hidden=!m;$('meTag').textContent='👤 '+m}
 let tasks=[],contacts=[],links=[],timers=[],notepad='',trash=[],templates=[];
@@ -653,7 +660,12 @@ function mergeInto(arr,inTrash){let n=0;
   return n}
 let undoStack=[],lastSnap=null,lastLocalChange=0;
 const snap=()=>JSON.stringify({tasks,trash});
-function save(o){const cur=snap();if(!(o&&o.noUndo)&&lastSnap!==null&&lastSnap!==cur){undoStack.push(lastSnap);if(undoStack.length>30)undoStack.shift()}lastSnap=cur;lastLocalChange=Date.now();
+let noDueNote=false;
+function dueNotes(o){if(noDueNote||(o&&o.noUndo)||!lastSnap)return;try{const m=me();if(!m)return;const prev=new Map(JSON.parse(lastSnap).tasks.map(t=>[t.id,t.due||'']));
+  tasks.forEach(t=>{if(!prev.has(t.id))return;const od=prev.get(t.id);if((t.due||'')!==od&&t.by&&t.by!==m){const why=(prompt('Причина переноса срока задачи «'+t.text.slice(0,60)+'» (обязательно):','')||'').trim();
+    if(!why){t.due=od;touch(t);toast('Перенос отменён: не указана причина');return}
+    (t.notes=t.notes||[]).push({d:new Date().toISOString(),t:'Срок перенесён с '+(od?fmt(od):'—')+' на '+(t.due?fmt(t.due):'—')+'. Причина: '+why,by:m});t.updBy=m}})}catch(e){}}
+function save(o){dueNotes(o);const cur=snap();if(!(o&&o.noUndo)&&lastSnap!==null&&lastSnap!==cur){undoStack.push(lastSnap);if(undoStack.length>30)undoStack.shift()}lastSnap=cur;lastLocalChange=Date.now();
   LS.set(KEY,JSON.stringify(tasks));LS.set(EXTRA,JSON.stringify(extraObj()));fileWrite();cloudPush()}
 function undo(){if(!undoStack.length){toast('Отменять нечего');return}const prev=JSON.parse(undoStack.pop());const now=new Map(tasks.map(t=>[t.id,JSON.stringify(t)]));
   tasks=prev.tasks.map(norm);trash=prev.trash||[];tasks.forEach(t=>{if(now.get(t.id)!==JSON.stringify(t))touch(t)});lastSnap=snap();save({noUndo:true});render();toast('Отменено')}
@@ -669,7 +681,7 @@ const daysLeft=s=>s?Math.round((new Date(s)-new Date(today()))/864e5):Infinity;
 const addDays=(s,n)=>{const [y,m,d]=s.split('-').map(Number);return iso(new Date(y,m-1,d+n))};
 const dow=s=>s?(new Date(s).getDay()+6)%7:0; // Mon=0
 const byId=id=>tasks.find(x=>x.id===id);
-const touch=t=>{t.upd=Date.now()};
+const touch=t=>{t.upd=Date.now();t.updBy=me()};
 const WD=['ПН','ВТ','СР','ЧТ','ПТ','СБ','ВС'];
 const MONTHS=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const WDN=['ПОНЕДЕЛЬНИК','ВТОРНИК','СРЕДУ','ЧЕТВЕРГ','ПЯТНИЦУ','СУББОТУ','ВОСКРЕСЕНЬЕ'];
@@ -726,7 +738,7 @@ function submitForm(){
   if(rep&&!due){toast('Для повтора нужен срок');$('fDue').focus();return}
   const m=me();let by,to;if(dir==='out'){by=m;to=from}else{by=from;to=editKeepTo!==null?editKeepTo:m}
   if(editId){const t=byId(editId);if(t){Object.assign(t,{text,by,to,due,time,rep,wdays,link,prio});touch(t)}toast('Задача обновлена')}
-  else{tasks.unshift(norm({id:Date.now(),text,by,to,due,time,rep,wdays,link,prio,done:false,created:today(),upd:Date.now()}));toast('Записано')}
+  else{tasks.unshift(norm({id:Date.now(),updBy:me(),text,by,to,due,time,rep,wdays,link,prio,done:false,created:today(),upd:Date.now()}));toast('Записано')}
   save();resetForm();render();$('fText').focus();
 }
 function resetForm(){editId=null;editKeepTo=null;$('fText').value='';$('fFrom').value='';$('fTime').value='';$('fLink').value='';$('fDue').value=today();renderTpl();$('phint').textContent='';setRepVal('');
@@ -793,11 +805,12 @@ function toggleVoice(){
 
 /* ============ list actions ============ */
 function setFilter(b){document.querySelectorAll('.filters > button').forEach(x=>x.classList.remove('on'));b.classList.add('on');filter=b.dataset.f;render()}
-function toggleOpen(id){openId=openId===id?null:id;render();if(openId){const i=document.getElementById('note-'+id);if(i)i.focus()}}
+function toggleOpen(id){openId=openId===id?null:id;if(openId){const t=byId(id);if(t)markSeen(t)}render();if(openId){const i=document.getElementById('note-'+id);if(i)i.focus()}}
 function markDone(t){t.done=true;t.doneAt=today();t.doneBy=me();touch(t);if(t.rep&&!t.spawned){const nd=nextDueT(t);if(nd){t.spawned=true;tasks.unshift(norm({id:Date.now()+Math.floor(Math.random()*1000),text:t.text,by:t.by,to:t.to,due:nd,time:t.time,rep:t.rep,wdays:t.wdays,prio:t.prio,link:t.link,steps:(t.steps||[]).map(s=>({t:s.t,done:false})),done:false,created:today(),upd:Date.now(),series:t.series||t.id}))}}}
 function toggleDone(id){const t=byId(id);if(t.done){t.done=false;t.doneAt=null;t.doneBy=null;touch(t)}else markDone(t);save();render()}
-function addStep(id){const i=document.getElementById('step-'+id);const v=(i.value||'').trim();if(!v)return;const t=byId(id);t.steps.push({t:v,done:false});touch(t);save();render();const j=document.getElementById('step-'+id);if(j)j.focus()}
-function toggleStep(id,k){const t=byId(id);t.steps[k].done=!t.steps[k].done;touch(t);save();render()}
+function addStep(id){const i=document.getElementById('step-'+id);let v=(i.value||'').trim();if(!v)return;const t=byId(id);const s={t:v,done:false};const md=v.match(/^(.*?)\s+до\s+(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\s*$/i);if(md){v=md[1].trim();const y=md[4]||String(new Date().getFullYear());s.due=y+'-'+md[3].padStart(2,'0')+'-'+md[2].padStart(2,'0')}
+  const mm=v.match(/^(.*?)\s*@\s*([^@]+?)\s*$/);if(mm&&mm[1].trim()){s.t=mm[1].trim();s.to=mm[2].trim()}else s.t=v;s.by=me();t.steps.push(s);touch(t);save();render();const j=document.getElementById('step-'+id);if(j)j.focus()}
+function toggleStep(id,k){const t=byId(id);const s=t.steps[k];s.done=!s.done;if(s.done){s.doneBy=me();s.doneAt=today()}else{delete s.doneBy;delete s.doneAt}touch(t);save();render()}
 function delStep(id,k){const t=byId(id);t.steps.splice(k,1);touch(t);save();render()}
 function searchTag(tag){$('q').value='#'+tag;render()}
 function taskText(t){return ['ЗАДАЧА: '+t.text,'Срок: '+fmt(t.due)+(t.time?' '+t.time:''),whoStr(t),t.done?'Выполнено: '+fmt(t.doneAt||t.due)+(t.doneBy?' ('+t.doneBy+')':''):'',t.prio?'Приоритет: '+PRIO[t.prio]:'',t.link?'Ссылка: '+t.link:'',...(t.steps.length?['Чек-лист:',...t.steps.map(s=>' ['+(s.done?'x':' ')+'] '+s.t)]:[]),...(t.notes.length?['Заметки:',...t.notes.map(n=>' '+fmtDT(n.d)+' '+n.t)]:[])].filter(Boolean).join('\n')}
@@ -834,14 +847,14 @@ function taskHtml(t){
   return `<div class="task ${state(t)} p${t.prio||0}${open?' open':''}${r.dir==='out'?' out':r.dir==='other'?' oth':''}">
     <div class="bar"></div>
     <div class="main">
-      <div class="text" onclick="toggleOpen(${t.id})">${selMode?`<input type="checkbox" class="selbox" ${selected.has(t.id)?'checked':''} onclick="event.stopPropagation();toggleSel(${t.id})">`:''}${r.dir==='out'?'<span class="pb wait">ЖДУ</span>':r.dir==='other'?`<span class="pb to">→ ${esc(r.to||'—')}</span>`:''}${t.prio?`<span class="pb pr">${PRIO[t.prio]}</span>`:''}${esc(t.text).replace(/#([\p{L}\d_\-]+)/gu,(m,g)=>`<span class="tag" onclick="event.stopPropagation();searchTag('${g.toLowerCase()}')">#${g}</span>`)}</div>
-      <div class="meta">${r.dir==='other'?`<span>ОТ: <b>${esc(r.from||'—')}</b></span><span>КОМУ: <b>${esc(r.to||'—')}</b>${phone(r.to)}</span>`:`<span>${r.dir==='out'?'КОМУ':'ОТ'}: <b>${esc(r.from||'—')}</b>${phone(r.from)}</span>`}<span>СОЗДАНО: ${fmt(t.created)}</span>${t.done?`<span>✔ ${fmt(t.doneAt||t.due)}${t.doneBy?' · '+esc(t.doneBy):''}</span>`:''}${t.rep?`<span class="rep">↻ ${repText(t)}</span>`:''}${t.notes.length?`<span>✎ ЗАМЕТОК: ${t.notes.length}</span>`:''}${t.steps.length?`<span>☑ ${t.steps.filter(s=>s.done).length}/${t.steps.length}</span>`:''}${t.link?`<span class="lnk" onclick="openLink(${t.id})" title="${esc(t.link)}">🔗 ОТКРЫТЬ</span>`:''}</div>
+      <div class="text" onclick="toggleOpen(${t.id})">${selMode?`<input type="checkbox" class="selbox" ${selected.has(t.id)?'checked':''} onclick="event.stopPropagation();toggleSel(${t.id})">`:''}${isNew(t)?'<span class="pb nw">НОВОЕ</span>':''}${r.dir==='out'?'<span class="pb wait">ЖДУ</span>':r.dir==='other'?`<span class="pb to">→ ${esc(r.to||'—')}</span>`:''}${t.prio?`<span class="pb pr">${PRIO[t.prio]}</span>`:''}${esc(t.text).replace(/#([\p{L}\d_\-]+)/gu,(m,g)=>`<span class="tag" onclick="event.stopPropagation();searchTag('${g.toLowerCase()}')">#${g}</span>`)}</div>
+      <div class="meta">${r.dir==='other'?`<span>ОТ: <b>${esc(r.from||'—')}</b></span><span>КОМУ: <b>${esc(r.to||'—')}</b>${phone(r.to)}</span>`:`<span>${r.dir==='out'?'КОМУ':'ОТ'}: <b>${esc(r.from||'—')}</b>${phone(r.from)}</span>`}<span>СОЗДАНО: ${fmt(t.created)}</span>${t.done?`<span>✔ ${fmt(t.doneAt||t.due)}${t.doneBy?' · '+esc(t.doneBy):''}</span>`:''}${t.rep?`<span class="rep">↻ ${repText(t)}</span>`:''}${t.notes.length?`<span>✎ ЗАМЕТОК: ${t.notes.length}</span>`:''}${t.steps.length?`<span>☑ ${t.steps.filter(s=>s.done).length}/${t.steps.length}${(()=>{const my=t.steps.filter(s=>s.to===me());if(!my.length||my.length===t.steps.length)return '';return ' · МОИ '+my.filter(s=>s.done).length+'/'+my.length})()}</span>`:''}${t.link?`<span class="lnk" onclick="openLink(${t.id})" title="${esc(t.link)}">🔗 ОТКРЫТЬ</span>`:''}</div>
       ${open?`<div class="detail">
         ${t.link?`<div class="lrow">🔗 <span>${esc(t.link)}</span><button onclick="openLink(${t.id})">ОТКРЫТЬ</button><button onclick="copyLink(${t.id})">КОПИРОВАТЬ</button></div>`:''}
         <div class="notes">${t.notes.length?t.notes.map((n,k)=>`<div><i>${fmtDT(n.d)}${n.by?' · '+esc(n.by):''}</i>${esc(n.t)} <i style="float:right;cursor:pointer" title="Удалить заметку" onclick="delNote(${t.id},${k})">✖</i></div>`).join(''):'<div class="none">Заметок нет. Запишите, что сделано или что ответили.</div>'}</div>
         <div class="row"><input id="note-${t.id}" placeholder="Новая заметка… (Enter)" onkeydown="if(event.key==='Enter')addNote(${t.id})"><button class="btn sm" onclick="addNote(${t.id})">＋</button></div>
-        <div class="steps" style="margin-top:8px">${t.steps.map((s,k)=>`<div class="${s.done?'d':''}"><input type="checkbox" ${s.done?'checked':''} onchange="toggleStep(${t.id},${k})"><span>${esc(s.t)}</span><i onclick="delStep(${t.id},${k})" title="Удалить пункт">✖</i></div>`).join('')}</div>
-        <div class="row"><input id="step-${t.id}" placeholder="Пункт чек-листа… (Enter)" onkeydown="if(event.key==='Enter')addStep(${t.id})"><button class="btn sm" onclick="addStep(${t.id})">☑</button></div>
+        <div class="steps" style="margin-top:8px">${t.steps.map((s,k)=>`<div class="${s.done?'d':''}"><input type="checkbox" ${s.done?'checked':''} onchange="toggleStep(${t.id},${k})"><span style="flex:0 1 auto">${esc(s.t)}</span>${s.to?`<small class="${s.to===me()?'my':''}">— ${esc(s.to)}</small>`:''}${s.due&&!s.done?`<small style="color:${s.due<today()?'var(--bad)':s.due===today()?'var(--warn)':'var(--dim)'}">до ${fmt(s.due)}</small>`:''}${s.done&&(s.doneBy||s.doneAt)?`<small>✓ ${esc(s.doneBy||'')}${s.doneAt?' '+fmt(s.doneAt):''}</small>`:''}<span style="flex:1"></span><i onclick="delStep(${t.id},${k})" title="Удалить пункт">✖</i></div>`).join('')}</div>
+        <div class="row"><input id="step-${t.id}" placeholder="Пункт чек-листа… (@Имя — кто делает, «до 18.09» — срок, Enter)" onkeydown="if(event.key==='Enter')addStep(${t.id})"><button class="btn sm" onclick="addStep(${t.id})">☑</button></div>
         <div class="row" style="margin-top:8px;justify-content:flex-end"><button class="btn sm ghost" onclick="copyTask(${t.id})">⎘ Как текст</button><button class="btn sm ghost" onclick="icsTask(${t.id})" ${t.due?'':'disabled'}>📅 В Outlook</button></div>
       </div>`:''}
     </div>
@@ -984,7 +997,7 @@ function renderContacts(){
   const extra=[...new Set(tasks.flatMap(t=>[t.by,t.to]).filter(n=>n&&!names.has(n)))];
   const rows=contacts.slice().sort((a,b)=>a.name.localeCompare(b.name,'ru')).map(c=>({c,name:c.name}));
   extra.forEach(n=>rows.push({c:null,name:n}));
-  $('ctBody').innerHTML=rows.length?rows.map(({c,name})=>{const m=me();const i=tasks.filter(t=>!t.done&&t.by===name&&t.to===m).length,o=tasks.filter(t=>!t.done&&t.to===name&&t.by===m).length,a=tasks.filter(t=>!t.done&&t.to===name).length;
+  $('ctBody').innerHTML=rows.length?rows.map(({c,name})=>{const m=me();const i=tasks.filter(t=>!t.done&&t.by===name&&hasTo(t,m)).length,o=tasks.filter(t=>!t.done&&hasTo(t,name)&&t.by===m).length,a=tasks.filter(t=>!t.done&&hasTo(t,name)).length;
     return `<tr><td class="n" onclick="showPerson(${JSON.stringify(name).replace(/"/g,'&quot;')})">${esc(name)}${c?'':' <small style="color:var(--dim)">(из задач)</small>'}</td><td>${c?esc(c.phone||''):''}</td><td>${c?esc(c.role||''):''}</td><td class="c">${i||''}</td><td class="c v">${o||''}</td><td class="c">${a||''}</td>
       <td style="text-align:right;white-space:nowrap">${c?`<button onclick="editContact(${c.id})">✎</button><button onclick="delContact(${c.id})">✖</button>`:`<button onclick="$('cName').value=${JSON.stringify(name).replace(/"/g,'&quot;')};$('cPhone').focus()">＋ В СПРАВОЧНИК</button>`}</td></tr>`}).join(''):'<tr><td colspan="7" class="none">Справочник пуст. Добавьте людей выше — или они появятся сами из поля «от кого».</td></tr>';
 }
@@ -1006,7 +1019,7 @@ function buildReport(){
     `В РАБОТЕ (${cur.length}):`,...(cur.length?cur.map(t=>line(t,'до '+fmt(t.due)+(t.time?' '+t.time:''))):['— нет —']),'',
     `ПРОСРОЧЕНО (${over.length}):`,...(over.length?over.map(t=>line(t,fmt(t.due))):['— нет —']),'',
     `ЖДУ ОТ ДРУГИХ (${wait.length}):`,...(wait.length?wait.map(t=>line(t,'до '+fmt(t.due))):['— нет —'])];
-  if(me()&&S.scope==='all'){const g={};T.filter(t=>!t.done).forEach(t=>{const k=t.to||'— без исполнителя —';(g[k]=g[k]||[]).push(t)});out.push('','ПО ИСПОЛНИТЕЛЯМ:');Object.keys(g).sort((a,b)=>a.localeCompare(b,'ru')).forEach(k=>{const l=g[k].sort(sortTasks);out.push(`  ${k} (${l.length}, просрочено ${l.filter(t=>t.due&&t.due<t0).length}):`,...l.map(t=>'  '+line(t,t.due?'до '+fmt(t.due):'без срока')))})}
+  if(me()&&S.scope==='all'){const g={};T.filter(t=>!t.done).forEach(t=>{const L=toList(t.to);(L.length?L:['— без исполнителя —']).forEach(k=>{(g[k]=g[k]||[]).push(t)})});out.push('','ПО ИСПОЛНИТЕЛЯМ:');Object.keys(g).sort((a,b)=>a.localeCompare(b,'ru')).forEach(k=>{const l=g[k].sort(sortTasks);out.push(`  ${k} (${l.length}, просрочено ${l.filter(t=>t.due&&t.due<t0).length}):`,...l.map(t=>'  '+line(t,t.due?'до '+fmt(t.due):'без срока')))})}
   $('report').value=out.join('\n');
 }
 function printText(txt,title){const w=window.open('','_blank');if(!w){toast('Браузер заблокировал окно печати');return}
@@ -1074,7 +1087,7 @@ async function writeNow(){if(!fileHandle)return;
 async function pollShared(){if(!S.shared||!fileHandle||fileState!=='ok'||writing)return;
   try{const f=await fileHandle.getFile();if(f.lastModified===lastFileMod)return;lastFileMod=f.lastModified;const d=JSON.parse(await f.text()||'{}');if(!d||d.saved===lastSavedStamp)return;
     const before=new Set(tasks.map(t=>t.id));const n=applyBundle(d,'merge');lastSavedStamp=d.saved||'';if(n>0){LS.set(KEY,JSON.stringify(tasks));LS.set(EXTRA,JSON.stringify(extraObj()));lastSnap=snap();render();toast('Из общего файла: '+n+' изм.');
-      const m=me();if(m){const nw=tasks.filter(t=>!before.has(t.id)&&!t.done&&t.to===m&&t.by!==m);nw.slice(0,5).forEach(t=>notify('📥 Новая задача'+(t.by?' от '+t.by:''),t.text+(t.due?' · до '+fmt(t.due)+(t.time?' '+t.time:''):''),'new'+t.id));if(nw.length&&S.sound)beep()}}
+      const m=me();if(m){const nw=tasks.filter(t=>!before.has(t.id)&&!t.done&&hasTo(t,m)&&t.by!==m);nw.slice(0,5).forEach(t=>notify('📥 Новая задача'+(t.by?' от '+t.by:''),t.text+(t.due?' · до '+fmt(t.due)+(t.time?' '+t.time:''):''),'new'+t.id));if(nw.length&&S.sound)beep()}}
     if(n>0||lastLocalChange>Date.parse(d.saved||0))await writeNow()}
   catch(e){}}
 setInterval(pollShared,30000);
@@ -1103,10 +1116,11 @@ const cloudName=uid=>{const p=cloud.profiles.find(p=>p.id===uid);return p?p.name
 const cloudUid=name=>{name=(name||'').trim().toLowerCase();if(!name)return null;const p=cloud.profiles.find(p=>p.name.trim().toLowerCase()===name);return p?p.id:null};
 const cloudId=id=>/^\d+$/.test(String(id))?Number(id):String(id);
 function cloudRowToTask(r){const d=Object.assign({},r.data||{});d.id=cloudId(r.id);d.done=!!r.done;d.upd=Number(r.upd)||0;
-  const b=cloudName(r.by_uid),t=cloudName(r.to_uid);if(b)d.by=b;if(t)d.to=t;
+  const b=cloudName(r.by_uid);if(b)d.by=b;const names=(Array.isArray(r.to_uids)&&r.to_uids.length?r.to_uids:(r.to_uid?[r.to_uid]:[])).map(cloudName).filter(Boolean);if(names.length)d.to=names.join(', ');
   if(r.deleted_at){d.deletedAt=Number(r.deleted_at)}else delete d.deletedAt;return d}
 function cloudTaskToRow(t,deletedAt){const d=Object.assign({},t);delete d.deletedAt;
-  return {id:String(t.id),by_uid:cloudUid(t.by),to_uid:cloudUid(t.to),done:!!t.done,upd:deletedAt?Math.max(t.upd||0,deletedAt):(t.upd||0),deleted_at:deletedAt||null,data:d}}
+  const uids=toList(t.to).map(cloudUid).filter(Boolean);
+  return {id:String(t.id),by_uid:cloudUid(t.by),to_uid:uids[0]||null,to_uids:uids,done:!!t.done,upd:deletedAt?Math.max(t.upd||0,deletedAt):(t.upd||0),deleted_at:deletedAt||null,data:d}}
 function cloudSharedRow(kind,x,deletedAt){return {id:kind+':'+x.id,kind,upd:deletedAt?Math.max(x.upd||0,deletedAt):(x.upd||0),deleted_at:deletedAt||null,data:x}}
 function cloudSavePushed(){LS.set('hub.cloud.pushed',JSON.stringify(cloud.pushed));LS.set('hub.cloud.pushedS',JSON.stringify(cloud.pushedS))}
 
@@ -1143,7 +1157,7 @@ async function cloudLoad(){
     const tr=await sb.from('tasks').select('*');if(tr.error)throw tr.error;
     const sr=await sb.from('shared').select('*');if(sr.error)throw sr.error;
     const before=new Set(tasks.map(t=>t.id));
-    const n=cloudApply(tr.data||[],sr.data||[]);
+    const n=cloudApply(tr.data||[],sr.data||[]);seedSeen();
     cloud.state='ok';cloud.err='';
     if(n>0){LS.set(KEY,JSON.stringify(tasks));LS.set(EXTRA,JSON.stringify(extraObj()));lastSnap=snap();render();toast('Из общей базы: '+n+' изм.');cloudNotifyNew(before)}
     cloudSubscribe();
@@ -1172,9 +1186,23 @@ function cloudSubscribe(){
 function cloudOnChange(table,p){
   const r=p.new&&p.new.id?p.new:null;if(!r){if(p.eventType==='DELETE'&&p.old&&p.old.id&&table==='tasks'){const t=byId(cloudId(p.old.id));if(t){toTrash(t);save({noUndo:true});render()}}return}
   const before=new Set(tasks.map(t=>t.id));
+  const oldT=table==='tasks'?(()=>{const t=byId(cloudId(r.id));return t?JSON.parse(JSON.stringify(t)):null})():null;
   const n=table==='tasks'?cloudApply([r],[]):cloudApply([],[r]);
-  if(n>0){LS.set(KEY,JSON.stringify(tasks));LS.set(EXTRA,JSON.stringify(extraObj()));lastSnap=snap();render();cloudNotifyNew(before)}}
-function cloudNotifyNew(before){const m=me();if(!m)return;const nw=tasks.filter(t=>!before.has(t.id)&&!t.done&&t.to===m&&t.by!==m);
+  if(n>0){LS.set(KEY,JSON.stringify(tasks));LS.set(EXTRA,JSON.stringify(extraObj()));lastSnap=snap();render();cloudNotifyNew(before);
+    if(oldT){const nt=byId(cloudId(r.id));if(nt)cloudNotifyChange(oldT,nt)}}}
+/* что изменил другой человек в задаче, которую я вижу */
+function cloudNotifyChange(o,t){
+  const who=t.updBy||'';if(!who||who===me())return;const name=(t.text||'').replace(/\s+/g,' ').slice(0,60);const tag='chg'+t.id;
+  const on=o.notes||[],nn=t.notes||[],os=o.steps||[],ns=t.steps||[];let msg=null;
+  if(!o.done&&t.done)msg=[(t.doneBy||who)+' закрыл задачу',name];
+  else if(o.done&&!t.done)msg=[who+' вернул задачу в работу',name];
+  else if((o.due||'')!==(t.due||'')){const n=nn[nn.length-1];const why=n&&/^Срок перенесён/.test(n.t)?n.t.replace(/^.*?Причина: /,''):'';msg=[who+' перенёс срок: '+name,(t.due?'на '+fmt(t.due):'без срока')+(why?'. '+why:'')]}
+  else if(nn.length>on.length){const n=nn[nn.length-1];msg=[(n.by||who)+': заметка к «'+name+'»',n.t]}
+  else{const od=os.filter(s=>s.done).length,nd=ns.filter(s=>s.done).length;
+    if(nd>od){const s=ns.find((s,k)=>s.done&&!(os[k]&&os[k].done));msg=[who+' закрыл шаг'+(nd===ns.length?' (все шаги готовы)':''),(s?s.t+' · ':'')+name]}
+    else if(ns.length>os.length){const s=ns[ns.length-1];msg=s.to===me()?[who+' назначил вам шаг',s.t+(s.due?' · до '+fmt(s.due):'')+' · '+name]:[who+' добавил шаг',s.t+' · '+name]}}
+  if(msg){notify(msg[0],msg[1],tag);if(S.sound)beep()}}
+function cloudNotifyNew(before){const m=me();if(!m)return;const nw=tasks.filter(t=>!before.has(t.id)&&!t.done&&hasTo(t,m)&&t.by!==m);
   nw.slice(0,5).forEach(t=>notify('📥 Новая задача'+(t.by?' от '+t.by:''),t.text+(t.due?' · до '+fmt(t.due)+(t.time?' '+t.time:''):''),'new'+t.id));if(nw.length&&S.sound)beep()}
 
 function cloudPush(){if(!cloud.user)return;LS.set('hub.cloud.dirty','1');clearTimeout(cloud.timer);cloud.timer=setTimeout(cloudPushNow,400)}
@@ -1188,9 +1216,13 @@ async function cloudPushNow(){
     [['contact',contacts],['link',links],['template',templates]].forEach(([kind,arr])=>{arr.forEach(x=>{const k=kind+':'+x.id;seen.add(k);if((x.upd||0)>(cloud.pushedS[k]||0))srows.push(cloudSharedRow(kind,x))})});
     Object.keys(cloud.pushedS).forEach(k=>{if(!seen.has(k)&&cloud.pushedS[k]>0){const [kind,id]=k.split(/:(.*)/);srows.push(cloudSharedRow(kind,{id:cloudId(id),upd:0},Date.now()))}});
     const fails=[];
-    if(rows.length){const {error}=await cloud.sb.from('tasks').upsert(rows);
-      if(error){for(const r of rows){const e=await cloud.sb.from('tasks').upsert(r);if(e.error)fails.push((r.data.text||r.id)+': '+e.error.message);else cloud.pushed[r.id]=r.upd}}
-      else rows.forEach(r=>cloud.pushed[r.id]=r.upd)}
+    // известные базе задачи — обновляем по одной (сотрудник вправе менять свои), новые — вставляем
+    const fail=(r,e)=>{fails.push((r.data.text||r.id)+': '+(e.code==='42501'?'нет прав':e.message));if(e.code)cloud.pushed[r.id]=r.upd};
+    const known=rows.filter(r=>cloud.pushed[r.id]!==undefined),fresh=rows.filter(r=>cloud.pushed[r.id]===undefined);
+    for(const r of known){const e=await cloud.sb.from('tasks').update(r).eq('id',r.id).select('id');if(e.error)fail(r,e.error);else cloud.pushed[r.id]=r.upd}
+    if(fresh.length){const {error}=await cloud.sb.from('tasks').insert(fresh);
+      if(error){for(const r of fresh){const e=await cloud.sb.from('tasks').insert(r);if(e.error){if(e.error.code==='23505')cloud.pushed[r.id]=r.upd;else fail(r,e.error)}else cloud.pushed[r.id]=r.upd}}
+      else fresh.forEach(r=>cloud.pushed[r.id]=r.upd)}
     if(srows.length){const {error}=await cloud.sb.from('shared').upsert(srows);
       if(error){for(const r of srows){const e=await cloud.sb.from('shared').upsert(r);if(e.error)fails.push(r.id+': '+e.error.message);else{if(r.deleted_at)delete cloud.pushedS[r.id];else cloud.pushedS[r.id]=r.upd}}}
       else srows.forEach(r=>{if(r.deleted_at)delete cloud.pushedS[r.id];else cloud.pushedS[r.id]=r.upd})}
@@ -1234,14 +1266,14 @@ function impCancel(){impData=null;$('impBox').hidden=true}
 function doImport(mode){if(!impData)return;let n=0;
   if(mode==='replace'){if(!confirm('Заменить все текущие данные ('+tasks.length+' задач) на данные из файла?'))return;LS.set('hub.backup.before-import',JSON.stringify(bundle()));n=applyBundle(impData,'replace')}
   else n=applyBundle(impData,'merge');
-  impCancel();save();render();renderSettings();toast('Импорт: '+n+' изм.')}
+  impCancel();noDueNote=true;save();noDueNote=false;render();renderSettings();toast('Импорт: '+n+' изм.')}
 function dailyBackup(){if(!tasks.length)return;const k='hub.backup.'+today();if(LS.get(k))return;LS.set(k,JSON.stringify(bundle()));
   const ks=LS.keys().filter(x=>/^hub\.backup\.\d{4}-\d{2}-\d{2}$/.test(x)).sort();while(ks.length>7)LS.del(ks.shift())}
 function renderBackups(){const ks=LS.keys().filter(x=>x.startsWith('hub.backup.')).sort().reverse();
   $('backups').innerHTML=ks.length?ks.map(k=>{let n=0;try{const d=JSON.parse(LS.get(k));n=(Array.isArray(d)?d:d.tasks).length}catch(e){}const lbl=k.slice(11);const name=/^\d{4}/.test(lbl)?fmt(lbl):(lbl==='before-import'?'до импорта':lbl==='before-restore'?'до восстановления':lbl);
     return `<div><span>${name}</span>${n} задач <button onclick="restoreBackup('${k}')">Восстановить</button></div>`}).join(''):'<div class="none">Копий пока нет — первая появится при следующем открытии панели с задачами.</div>'}
 function restoreBackup(k){let d;try{d=JSON.parse(LS.get(k))}catch(e){showErr('Копия повреждена');return}const arr=Array.isArray(d)?d:d.tasks;if(!confirm('Заменить текущие данные ('+tasks.length+' задач) на копию ('+arr.length+')? Текущие будут сохранены как «до восстановления».'))return;
-  LS.set('hub.backup.before-restore',JSON.stringify(bundle()));applyBundle(d,'replace');save();render();renderSettings();toast('Восстановлено: '+tasks.length+' задач')}
+  LS.set('hub.backup.before-restore',JSON.stringify(bundle()));applyBundle(d,'replace');noDueNote=true;save();noDueNote=false;render();renderSettings();toast('Восстановлено: '+tasks.length+' задач')}
 function purgeDone(){const n0=tasks.length;tasks=tasks.filter(t=>!t.done||daysLeft(t.doneAt||t.due)>-30);const n=n0-tasks.length;if(n){save();render();renderSettings()}toast('Удалено: '+n)}
 
 /* ============ settings modal ============ */
@@ -1287,7 +1319,7 @@ function checkReminders(){
   let fired={};try{fired=JSON.parse(LS.get('hub.fired')||'{}')}catch(e){}
   let changed=false,any=false;
   const m=me();
-  for(const t of tasks){if(t.done||!t.due)continue;if(m&&t.to!==m&&!(t.by===m&&t.due<t0))continue;
+  for(const t of tasks){if(t.done||!t.due)continue;if(m&&!hasTo(t,m)&&!(t.by===m&&t.due<t0))continue;
     const ws=whoStr(t);const who=ws?' · '+ws:'';
     const fire=(kind,title)=>{const k=t.id+':'+kind;if(fired[k]===t0)return;fired[k]=t0;changed=true;any=true;notify(title,t.text+who,k)};
     if(t.due<t0){const bucket=S.overEvery>0?':h'+Math.floor(now.getHours()/S.overEvery):'';fire('over'+bucket,'⚠ ПРОСРОЧЕНО с '+fmt(t.due))}

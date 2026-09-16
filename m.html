@@ -36,14 +36,16 @@ header{position:sticky;top:0;z-index:5;background:rgba(11,15,20,.92);backdrop-fi
 .top .who{flex:1;color:var(--dim);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .top button{padding:6px 10px;font-size:14px}
 .seg{display:flex;gap:6px;margin-top:8px}
-.seg button{flex:1;padding:8px 6px;font-size:14px;color:var(--dim)}
+.seg button{flex:1;padding:8px 6px;font-size:14px;color:var(--dim);position:relative}
 .seg button.on{color:var(--txt);border-color:var(--acc);background:rgba(56,189,248,.12)}
 .seg.p button[data-p="1"].on{color:var(--imp);border-color:var(--imp);background:rgba(255,166,64,.12)}
 .seg.p button[data-p="2"].on{color:var(--bad);border-color:var(--bad);background:rgba(255,77,109,.12)}
+.seg button .cnt{position:absolute;top:-6px;right:-4px;background:var(--acc);color:#04111a;font-size:11px;font-weight:700;border-radius:10px;padding:1px 6px;min-width:18px}
 #st{font-size:12px;color:var(--dim);margin-top:6px}
 #st.err{color:var(--bad)}
 main{padding:10px 12px calc(90px + env(safe-area-inset-bottom))}
 .card{display:flex;gap:10px;background:var(--pan);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px;position:relative}
+.card.new{border-color:rgba(56,189,248,.55);box-shadow:inset 0 0 0 1px rgba(56,189,248,.25)}
 .card .bar{width:4px;border-radius:3px;background:var(--line);flex:none}
 .card.p1 .bar{background:var(--imp)}.card.p2 .bar{background:var(--bad)}
 .card .c{flex:1;min-width:0}
@@ -51,6 +53,7 @@ main{padding:10px 12px calc(90px + env(safe-area-inset-bottom))}
 .card.done .t{color:var(--dim);text-decoration:line-through}
 .card .m{font-size:13px;color:var(--dim);margin-top:4px;display:flex;flex-wrap:wrap;gap:4px 10px}
 .card .m .over{color:var(--bad);font-weight:600}.card .m .today{color:var(--warn);font-weight:600}
+.card .m .nw{color:var(--acc);font-weight:600}
 .card .chk{flex:none;width:34px;height:34px;border-radius:50%;border:2px solid var(--dim);background:transparent;padding:0;font-size:18px;align-self:center}
 .card.done .chk{border-color:var(--ok);color:var(--ok)}
 .none{color:var(--dim);text-align:center;padding:40px 10px}
@@ -62,13 +65,20 @@ main{padding:10px 12px calc(90px + env(safe-area-inset-bottom))}
 .sheet h2{font-size:17px;margin:0 0 6px;display:flex;justify-content:space-between;align-items:center}
 .sheet h2 button{padding:4px 10px}
 .row{display:flex;gap:8px;margin-top:14px}.row button{flex:1}
+.row select.sm{width:auto;flex:none;max-width:42%;padding:10px}
 .d-text{white-space:pre-wrap;word-break:break-word;font-size:17px;margin:6px 0 10px}
 .d-meta{color:var(--dim);font-size:14px;line-height:1.7}
 .step{display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line)}
 .step input{width:22px;height:22px;margin:2px 0 0;flex:none}
-.step.done span{color:var(--dim);text-decoration:line-through}
+.step .s{flex:1}
+.step.done .s .tx{color:var(--dim);text-decoration:line-through}
+.step .w{font-size:12px;color:var(--dim);display:block}
+.step.my .w{color:var(--acc)}
 .note{font-size:14px;padding:6px 0;border-bottom:1px solid var(--line)}.note b{color:var(--dim);font-weight:normal;font-size:12px;display:block}
-.toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#1f2937;color:var(--txt);padding:10px 16px;border-radius:10px;font-size:14px;z-index:20;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{padding:8px 12px;font-size:14px;color:var(--dim)}
+.chips button.on{color:var(--txt);border-color:var(--acc);background:rgba(56,189,248,.12)}
+.toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#1f2937;color:var(--txt);padding:10px 16px;border-radius:10px;font-size:14px;z-index:20;box-shadow:0 4px 16px rgba(0,0,0,.5);max-width:92vw}
 .menu{position:absolute;right:10px;top:calc(46px + env(safe-area-inset-top));background:var(--pan);border:1px solid var(--line);border-radius:12px;overflow:hidden;z-index:7;min-width:220px}
 .menu button{display:block;width:100%;text-align:left;border:none;border-radius:0;border-bottom:1px solid var(--line);padding:12px 14px}
 </style>
@@ -97,6 +107,7 @@ main{padding:10px 12px calc(90px + env(safe-area-inset-bottom))}
   </header>
   <div class="menu hidden" id="menu">
     <button onclick="askNotif()">🔔 Включить уведомления</button>
+    <button onclick="markAllSeen()">👁 Снять метки «новое»</button>
     <button onclick="reload()">↻ Обновить</button>
     <button onclick="logout()">⎋ Выйти</button>
   </div>
@@ -118,18 +129,35 @@ const today=()=>iso(new Date());
 const fmt=s=>s?s.slice(8,10)+'.'+s.slice(5,7)+'.'+s.slice(0,4):'';
 const daysLeft=s=>s?Math.round((new Date(s+'T00:00')-new Date(today()+'T00:00'))/864e5):null;
 const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
+const short=s=>{s=String(s||'').replace(/\s+/g,' ');return s.length>48?s.slice(0,46)+'…':s};
 
 let sb=null,user=null,me='',role='member',profiles=[],tasks=[],chan=null;
 let scope=ls.get('m.scope')||'mine',tab='open',openId=null,editId=null;
+let seen={};try{seen=JSON.parse(ls.get('m.seen')||'null')}catch(e){seen=null}
 
-function toast(s){const e=document.createElement('div');e.className='toast';e.textContent=s;document.body.appendChild(e);setTimeout(()=>e.remove(),2200)}
+function toast(s){const e=document.createElement('div');e.className='toast';e.textContent=s;document.body.appendChild(e);setTimeout(()=>e.remove(),2600)}
 function setSt(s,err){const e=$('st');e.textContent=s;e.className=err?'err':''}
 const nameOf=uid=>{const p=profiles.find(p=>p.id===uid);return p?p.name:''};
 const uidOf=name=>{name=(name||'').trim().toLowerCase();const p=profiles.find(p=>p.name.trim().toLowerCase()===name);return p?p.id:null};
 const isAdmin=()=>role==='admin';
 const byId=id=>tasks.find(t=>String(t.id)===String(id));
-function rowToTask(r){const d=Object.assign({},r.data||{});d.id=r.id;d.done=!!r.done;d.upd=Number(r.upd)||0;const b=nameOf(r.by_uid),t=nameOf(r.to_uid);if(b)d.by=b;if(t)d.to=t;d._del=!!r.deleted_at;return d}
-function taskToRow(t,del){const d=Object.assign({},t);delete d._del;return {id:String(t.id),by_uid:uidOf(t.by),to_uid:uidOf(t.to),done:!!t.done,upd:t.upd||0,deleted_at:del||null,data:d}}
+/* несколько исполнителей: в t.to имена через запятую */
+const toList=s=>String(s||'').split(',').map(x=>x.trim()).filter(Boolean);
+const hasTo=(t,n)=>toList(t.to).includes(n);
+const isGroup=t=>toList(t.to).length>1;
+const touch=t=>{t.upd=Date.now();t.updBy=me};
+function rowToTask(r){const d=Object.assign({},r.data||{});d.id=r.id;d.done=!!r.done;d.upd=Number(r.upd)||0;
+  const b=nameOf(r.by_uid);if(b)d.by=b;
+  const names=(Array.isArray(r.to_uids)&&r.to_uids.length?r.to_uids:(r.to_uid?[r.to_uid]:[])).map(nameOf).filter(Boolean);
+  if(names.length)d.to=names.join(', ');
+  d.notes=Array.isArray(d.notes)?d.notes:[];d.steps=Array.isArray(d.steps)?d.steps:[];d._del=!!r.deleted_at;return d}
+function taskToRow(t,del){const d=Object.assign({},t);delete d._del;const uids=toList(t.to).map(uidOf).filter(Boolean);
+  return {id:String(t.id),by_uid:uidOf(t.by),to_uid:uids[0]||null,to_uids:uids,done:!!t.done,upd:t.upd||0,deleted_at:del||null,data:d}}
+/* метка «новое»: задачу менял кто-то другой после того, как я её открывал */
+const isNew=t=>!!(t.updBy&&t.updBy!==me&&(t.upd||0)>(seen[String(t.id)]||0));
+function saveSeen(){ls.set('m.seen',JSON.stringify(seen))}
+function markSeen(t){seen[String(t.id)]=Math.max(seen[String(t.id)]||0,t.upd||0);saveSeen()}
+function markAllSeen(){$('menu').classList.add('hidden');tasks.forEach(markSeen);render();toast('Метки сняты')}
 
 /* ---------- вход ---------- */
 async function init(){
@@ -160,8 +188,8 @@ async function load(){
     const mp=profiles.find(p=>p.id===user.id);me=mp?mp.name:(user.email||'').split('@')[0];role=mp?mp.role:'member';
     const tr=await sb.from('tasks').select('*').is('deleted_at',null);if(tr.error)throw tr.error;
     tasks=(tr.data||[]).map(rowToTask);
+    if(!seen){seen={};tasks.forEach(t=>seen[String(t.id)]=t.upd||0);saveSeen()} // первый запуск: всё старое не считается новым
     $('who').textContent=me+(isAdmin()?' · руководитель':'');
-    $('scope').classList.toggle('hidden',false);
     setSt('');render();
   }catch(e){setSt('Нет связи: '+(e.message||e),true)}
 }
@@ -173,28 +201,47 @@ function subscribe(){
     if(!r){if(p.old&&p.old.id){tasks=tasks.filter(t=>String(t.id)!==String(p.old.id));render()}return}
     const t=rowToTask(r);const i=tasks.findIndex(x=>String(x.id)===String(t.id));
     if(t._del){if(i>=0){tasks.splice(i,1);render()}return}
-    if(i<0){tasks.push(t);render();if(!t.done&&t.to===me&&t.by!==me)notify('Новая задача'+(t.by?' от '+t.by:''),t.text+(t.due?' · до '+fmt(t.due):''))}
-    else if(t.upd>=(tasks[i].upd||0)){tasks[i]=t;render()}
+    if(i<0){tasks.push(t);render();if(!t.done&&hasTo(t,me)&&t.by!==me)notify('Новая задача'+(t.by?' от '+t.by:''),t.text+(t.due?' · до '+fmt(t.due):''))}
+    else if(t.upd>=(tasks[i].upd||0)){const old=tasks[i];tasks[i]=t;render();notifyChange(old,t)}
   }).subscribe(st=>{if(st==='CHANNEL_ERROR'||st==='TIMED_OUT')setSt('Нет живых обновлений — нажмите ⋮ → Обновить',true)});
 }
+/* что изменил другой человек в задаче, которую я вижу */
+function notifyChange(o,t){
+  const who=t.updBy||'';if(!who||who===me)return;const name=short(t.text);
+  if(!o.done&&t.done){notify((t.doneBy||who)+' закрыл задачу',name);return}
+  if(o.done&&!t.done){notify(who+' вернул задачу в работу',name);return}
+  if((o.due||'')!==(t.due||'')){const n=t.notes[t.notes.length-1];const why=n&&/^Срок перенесён/.test(n.t)?n.t.replace(/^.*?Причина: /,''):'';notify(who+' перенёс срок: '+name,(t.due?'на '+fmt(t.due):'без срока')+(why?'. '+why:''));return}
+  if(t.notes.length>o.notes.length){const n=t.notes[t.notes.length-1];notify((n.by||who)+': заметка к «'+name+'»',n.t);return}
+  const od=o.steps.filter(s=>s.done).length,nd=t.steps.filter(s=>s.done).length;
+  if(nd>od){const s=t.steps.find((s,k)=>s.done&&!(o.steps[k]&&o.steps[k].done));notify(who+' закрыл шаг'+(nd===t.steps.length?' (все шаги готовы)':''),(s?s.t+' · ':'')+name);return}
+  if(t.steps.length>o.steps.length){const s=t.steps[t.steps.length-1];if(s.to===me)notify(who+' назначил вам шаг',s.t+(s.due?' · до '+fmt(s.due):'')+' · '+name);else notify(who+' добавил шаг',s.t+' · '+name)}
+}
 async function push(t,del){
-  const {error}=await sb.from('tasks').upsert(taskToRow(t,del));
-  if(error){toast('Не записано: '+error.message);setSt('Ошибка записи',true);return false}
-  return true}
+  // существующую задачу обновляем (сотрудник имеет право менять свои), новую — вставляем
+  const row=taskToRow(t,del);
+  let {data,error}=await sb.from('tasks').update(row).eq('id',row.id).select('id');
+  if(!error&&!(data&&data.length)){const r=await sb.from('tasks').insert(row);error=r.error;if(error&&error.code==='23505')error=null}
+  if(error){toast('Не записано: '+(error.code==='42501'?'нет прав на эту задачу':error.message));setSt('Ошибка записи',true);return false}
+  markSeen(t);return true}
 
 /* ---------- список ---------- */
 function setScope(s){scope=s;ls.set('m.scope',s);render()}
 function setTab(t){tab=t;render()}
 function visible(t){
   if(tab==='open'?t.done:!t.done)return false;
-  if(scope==='mine')return t.to===me||(!t.to&&t.by===me);
-  if(scope==='out')return t.by===me&&t.to!==me;
+  if(scope==='mine')return hasTo(t,me)||(!t.to&&t.by===me);
+  if(scope==='out')return t.by===me&&toList(t.to).some(n=>n!==me);
   return true}
 function dueCls(t){const d=daysLeft(t.due);if(d===null)return '';return d<0?'over':d===0?'today':''}
 function dueStr(t){const d=daysLeft(t.due);if(d===null)return '';return (d<0?'просрочено '+(-d)+' дн. · ':d===0?'сегодня · ':d===1?'завтра · ':'')+fmt(t.due)+(t.time?' '+t.time:'')}
+function whoLine(t){const L=toList(t.to),others=L.filter(n=>n!==me),out=[];
+  if(L.includes(me)&&others.length)out.push('вместе с: '+esc(others.join(', ')));else if(others.length)out.push('кому: '+esc(others.join(', ')));
+  if(t.by&&t.by!==me)out.push('от: '+esc(t.by));return out}
 function render(){
   document.querySelectorAll('#scope button').forEach(b=>b.classList.toggle('on',b.dataset.s===scope));
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));
+  const nNew=tasks.filter(t=>!t.done&&isNew(t)).length;
+  const ob=document.querySelector('#tabs button[data-t=open]');ob.innerHTML='Активные'+(nNew?`<span class="cnt">${nNew}</span>`:'');
   const arr=tasks.filter(visible);
   const cmp=(x,y)=>x<y?-1:x>y?1:0;
   if(tab==='open')arr.sort((a,b)=>cmp(a.due||'9',b.due||'9')||(b.prio||0)-(a.prio||0)||(b.upd||0)-(a.upd||0));
@@ -205,53 +252,67 @@ function render(){
   arr.forEach(t=>{
     let g='';if(tab==='open'){const d=daysLeft(t.due);g=d===null?'Без срока':d<0?'Просрочено':d===0?'Сегодня':d<=7?'На неделе':'Позже'}
     if(g!==grp){grp=g;if(g)out+='<div class="grp">'+g+'</div>'}
-    const who=[];if(t.to&&t.to!==me)who.push('кому: '+esc(t.to));if(t.by&&t.by!==me)who.push('от: '+esc(t.by));
-    const steps=(t.steps||[]).length?`шаги ${(t.steps||[]).filter(s=>s.done).length}/${t.steps.length}`:'';
-    out+=`<div class="card p${t.prio||0}${t.done?' done':''}" onclick="openTask('${esc(t.id)}')"><div class="bar"></div><div class="c"><div class="t">${esc(t.text)}</div>
-      <div class="m">${t.due?`<span class="${dueCls(t)}">${dueStr(t)}</span>`:''}${who.map(w=>'<span>'+w+'</span>').join('')}${steps?'<span>'+steps+'</span>':''}${(t.notes||[]).length?'<span>💬 '+t.notes.length+'</span>':''}</div></div>
+    const my=t.steps.filter(s=>s.to===me),myOpen=my.filter(s=>!s.done),nd=myOpen.map(s=>s.due).filter(Boolean).sort()[0];
+    const steps=my.length?`ваши шаги ${my.length-myOpen.length}/${my.length}${nd?' · <span class="'+(daysLeft(nd)<0?'over':daysLeft(nd)===0?'today':'')+'">до '+fmt(nd)+'</span>':''}`+(t.steps.length>my.length?` (всего ${t.steps.filter(s=>s.done).length}/${t.steps.length})`:''):t.steps.length?`шаги ${t.steps.filter(s=>s.done).length}/${t.steps.length}`:'';
+    const nw=isNew(t);
+    out+=`<div class="card p${t.prio||0}${t.done?' done':''}${nw?' new':''}" onclick="openTask('${esc(t.id)}')"><div class="bar"></div><div class="c"><div class="t">${esc(t.text)}</div>
+      <div class="m">${nw?'<span class="nw">● новое</span>':''}${t.due?`<span class="${dueCls(t)}">${dueStr(t)}</span>`:''}${whoLine(t).map(w=>'<span>'+w+'</span>').join('')}${steps?'<span>'+steps+'</span>':''}${t.notes.length?'<span>💬 '+t.notes.length+'</span>':''}${t.done&&t.doneBy?'<span>✓ '+esc(t.doneBy)+'</span>':''}</div></div>
       <button class="chk" onclick="event.stopPropagation();toggleDone('${esc(t.id)}')">${t.done?'✓':''}</button></div>`});
   L.innerHTML=out;
 }
 async function toggleDone(id){const t=byId(id);if(!t)return;
   if(t.done){t.done=false;t.doneAt=null;t.doneBy=null}else{t.done=true;t.doneAt=today();t.doneBy=me}
-  t.upd=Date.now();render();if(await push(t))toast(t.done?'Сделано':'Возвращено в работу')}
+  touch(t);render();if(await push(t))toast(t.done?'Сделано':'Возвращено в работу')}
 
 /* ---------- карточка задачи ---------- */
-function openTask(id){const t=byId(id);if(!t)return;openId=t.id;
-  const mine=t.by===me||isAdmin();
+function openTask(id){const t=byId(id);if(!t)return;openId=t.id;markSeen(t);
+  const mine=t.by===me||isAdmin(),L=toList(t.to),grp=L.length>1;
+  const stepDue=s=>!s.due||s.done?'':` · <span class="${daysLeft(s.due)<0?'over':daysLeft(s.due)===0?'today':''}">до ${fmt(s.due)}</span>`;
+  const stepWho=s=>{const a=[];if(s.to)a.push(esc(s.to));if(s.done&&s.doneBy&&s.doneBy!==s.to)a.push('закрыл '+esc(s.doneBy));else if(s.done&&s.doneBy&&!s.to)a.push(esc(s.doneBy));if(s.done&&s.doneAt)a.push(fmt(s.doneAt));return (a.length||s.due)?`<span class="w">${a.join(' · ')}${stepDue(s)}</span>`:''};
   $('sheetBody').innerHTML=`<h2><span>Задача</span><button class="ghost" onclick="closeSheet()">✕</button></h2>
     <div class="d-text">${esc(t.text)}</div>
-    <div class="d-meta">${t.due?'Срок: <span class="'+dueCls(t)+'">'+dueStr(t)+'</span><br>':''}${t.by?'От: '+esc(t.by)+'<br>':''}${t.to?'Кому: '+esc(t.to)+'<br>':''}${t.prio==2?'Приоритет: <span style="color:var(--bad)">срочно</span><br>':t.prio==1?'Приоритет: <span style="color:var(--imp)">важно</span><br>':''}${t.link?'<a href="'+esc(t.link)+'" target="_blank" style="color:var(--acc)">Ссылка</a><br>':''}${t.done?'Сделано '+fmt(t.doneAt||'')+(t.doneBy?' · '+esc(t.doneBy):'')+'<br>':''}</div>
-    ${(t.steps||[]).length?'<label>Шаги</label>'+t.steps.map((s,i)=>`<div class="step${s.done?' done':''}"><input type="checkbox" ${s.done?'checked':''} onchange="stepToggle(${i},this.checked)"><span>${esc(s.t)}</span></div>`).join(''):''}
-    <label>Заметки</label>${(t.notes||[]).map(n=>`<div class="note"><b>${esc(n.by||'')} ${n.d?fmt(n.d.slice(0,10)):''}</b>${esc(n.t)}</div>`).join('')||'<div class="note" style="color:var(--dim)">пока нет</div>'}
+    <div class="d-meta">${t.due?'Срок: <span class="'+dueCls(t)+'">'+dueStr(t)+'</span><br>':''}${t.by?'От: '+esc(t.by)+'<br>':''}${L.length?(grp?'Исполнители: ':'Кому: ')+esc(L.join(', '))+'<br>':''}${t.prio==2?'Приоритет: <span style="color:var(--bad)">срочно</span><br>':t.prio==1?'Приоритет: <span style="color:var(--imp)">важно</span><br>':''}${t.link?'<a href="'+esc(t.link)+'" target="_blank" style="color:var(--acc)">🔗 '+esc(t.link)+'</a><br>':''}${t.done?'Выполнено: '+fmt(t.doneAt||'')+(t.doneBy?' · '+esc(t.doneBy):'')+'<br>':''}</div>
+    <label>Шаги</label>${t.steps.map((s,i)=>`<div class="step${s.done?' done':''}${s.to===me?' my':''}"><input type="checkbox" ${s.done?'checked':''} onchange="stepToggle(${i},this.checked)"><span class="s"><span class="tx">${esc(s.t)}</span>${stepWho(s)}</span></div>`).join('')||'<div class="note" style="color:var(--dim)">шагов нет</div>'}
+    <div class="row" style="margin-top:8px"><input id="stepIn" placeholder="Добавить шаг…" onkeydown="if(event.key==='Enter')addStep()"><button onclick="addStep()" style="flex:none">＋</button></div>
+    <div class="row" style="margin-top:6px"><select id="stepTo" class="sm" style="flex:1;max-width:none"><option value="">кто делает: любой</option>${[...new Set([...L,...(t.by?[t.by]:[]),me])].map(n=>`<option value="${esc(n)}" ${grp&&n===me?'selected':''}>${esc(n)}${n===me?' (я)':''}</option>`).join('')}</select><input id="stepDue" type="date" style="flex:1" title="срок шага"></div>
+    <label>Заметки</label>${t.notes.map(n=>`<div class="note"><b>${esc(n.by||'')} ${n.d?fmt(n.d.slice(0,10)):''}</b>${esc(n.t)}</div>`).join('')||'<div class="note" style="color:var(--dim)">пока нет</div>'}
     <div class="row"><input id="noteIn" placeholder="Добавить заметку…" onkeydown="if(event.key==='Enter')addNote()"><button onclick="addNote()" style="flex:none">＋</button></div>
-    <div class="row"><button class="${t.done?'':'pri'}" onclick="toggleDone('${esc(t.id)}');openTask('${esc(t.id)}')">${t.done?'↩ Вернуть в работу':'✓ Сделано'}</button>${mine?`<button onclick="openForm('${esc(t.id)}')">✎ Изменить</button>`:''}</div>
+    <div class="row"><button class="${t.done?'':'pri'}" onclick="toggleDone('${esc(t.id)}');openTask('${esc(t.id)}')">${t.done?'↩ Вернуть в работу':'✓ Сделано'}</button><button onclick="openForm('${esc(t.id)}')">✎ Изменить</button></div>
     ${mine?`<div class="row"><button class="danger ghost" onclick="delTask('${esc(t.id)}')">🗑 Удалить задачу</button></div>`:''}`;
-  $('sheet').classList.remove('hidden')}
+  $('sheet').classList.remove('hidden');render()}
 function closeSheet(){$('sheet').classList.add('hidden');openId=null;editId=null}
-async function stepToggle(i,v){const t=byId(openId);if(!t||!t.steps[i])return;t.steps[i].done=v;t.upd=Date.now();render();await push(t)}
-async function addNote(){const t=byId(openId);const v=($('noteIn').value||'').trim();if(!t||!v)return;(t.notes=t.notes||[]).push({d:new Date().toISOString(),t:v,by:me});t.upd=Date.now();if(await push(t)){render();openTask(t.id)}}
-async function delTask(id){const t=byId(id);if(!t||!confirm('Удалить задачу?'))return;const now=Date.now();t.upd=now;tasks=tasks.filter(x=>x!==t);closeSheet();render();if(await push(t,now))toast('Удалено')}
+async function stepToggle(i,v){const t=byId(openId);if(!t||!t.steps[i])return;const s=t.steps[i];s.done=v;if(v){s.doneBy=me;s.doneAt=today()}else{delete s.doneBy;delete s.doneAt}touch(t);render();if(await push(t))openTask(t.id)}
+async function addStep(){const t=byId(openId);const v=($('stepIn').value||'').trim();if(!t||!v)return;const sel=$('stepTo'),sd=$('stepDue');const s={t:v,done:false,by:me};if(sel&&sel.value)s.to=sel.value;if(sd&&sd.value)s.due=sd.value;t.steps.push(s);touch(t);if(await push(t)){render();openTask(t.id);setTimeout(()=>$('stepIn').focus(),50)}}
+async function addNote(){const t=byId(openId);const v=($('noteIn').value||'').trim();if(!t||!v)return;t.notes.push({d:new Date().toISOString(),t:v,by:me});touch(t);if(await push(t)){render();openTask(t.id)}}
+async function delTask(id){const t=byId(id);if(!t||!confirm('Удалить задачу?'))return;const now=Date.now();touch(t);tasks=tasks.filter(x=>x!==t);closeSheet();render();if(await push(t,now))toast('Удалено')}
 
 /* ---------- форма ---------- */
+let fTo=[],fPrio=0;
 function openForm(id){const t=id?byId(id):null;editId=t?t.id:null;
-  const people=isAdmin()?profiles:profiles.filter(p=>p.id===user.id);
-  const to=t?t.to:me;
+  const people=profiles.map(p=>p.name);
+  fTo=t?toList(t.to):[me];
+  const extra=fTo.filter(n=>!people.includes(n));
+  const canEdit=!t||t.by===me||isAdmin(); // сотрудник в чужой задаче может менять только срок и время
   $('sheetBody').innerHTML=`<h2><span>${t?'Изменить задачу':'Новая задача'}</span><button class="ghost" onclick="closeSheet()">✕</button></h2>
-    <label>Что сделать</label><textarea id="fText" placeholder="Текст задачи">${esc(t?t.text:'')}</textarea>
-    <label>Кому</label><select id="fTo">${people.map(p=>`<option value="${esc(p.name)}" ${p.name===to?'selected':''}>${esc(p.name)}${p.id===user.id?' (я)':''}</option>`).join('')}${to&&!people.some(p=>p.name===to)?`<option value="${esc(to)}" selected>${esc(to)}</option>`:''}</select>
+    <label>Что сделать</label><textarea id="fText" placeholder="Текст задачи" ${canEdit?'':'disabled'}>${esc(t?t.text:'')}</textarea>
+    <label>Кому (можно несколько)</label><div class="chips" id="fToChips">${[...people,...extra].map(n=>`<button data-n="${esc(n)}" class="${fTo.includes(n)?'on':''}" onclick="toggleTo(this)" ${canEdit?'':'disabled'}>${esc(n)}${n===me?' (я)':''}</button>`).join('')}</div>
     <div style="display:flex;gap:8px"><div style="flex:1"><label>Срок</label><input id="fDue" type="date" value="${esc(t?t.due:'')}"></div><div style="flex:1"><label>Время</label><input id="fTime" type="time" value="${esc(t?t.time:'')}"></div></div>
-    <label>Приоритет</label><div class="seg p" id="fPrio"><button data-p="0" onclick="setPrio(0)">обычно</button><button data-p="1" onclick="setPrio(1)">важно</button><button data-p="2" onclick="setPrio(2)">срочно</button></div>
+    ${t&&t.by&&t.by!==me?'<label>Причина переноса срока (обязательно, если меняете срок)</label><textarea id="fWhy" placeholder="Например: жду исходники от ОВ, раньше пятницы не получится" style="min-height:60px"></textarea><div class="note" style="color:var(--dim);border:0">Перенос с причиной запишется в заметки, автор задачи получит уведомление.</div>':''}
+    <label>Приоритет</label><div class="seg p" id="fPrio"><button data-p="0" onclick="setPrio(0)" ${canEdit?'':'disabled'}>обычно</button><button data-p="1" onclick="setPrio(1)" ${canEdit?'':'disabled'}>важно</button><button data-p="2" onclick="setPrio(2)" ${canEdit?'':'disabled'}>срочно</button></div>
     <div class="row"><button class="pri" onclick="saveForm()">Записать</button></div>`;
   setPrio(t?(t.prio||0):0);$('sheet').classList.remove('hidden');if(!t)setTimeout(()=>$('fText').focus(),100)}
-let fPrio=0;function setPrio(p){fPrio=p;document.querySelectorAll('#fPrio button').forEach(b=>b.classList.toggle('on',+b.dataset.p===p))}
+function toggleTo(b){b.classList.toggle('on');fTo=[...document.querySelectorAll('#fToChips button.on')].map(x=>x.dataset.n)}
+function setPrio(p){fPrio=p;document.querySelectorAll('#fPrio button').forEach(b=>b.classList.toggle('on',+b.dataset.p===p))}
 async function saveForm(){
   const text=$('fText').value.trim();if(!text){$('fText').focus();return}
-  const to=$('fTo').value,due=$('fDue').value,time=$('fTime').value;
+  const due=$('fDue').value,time=$('fTime').value,to=fTo.join(', ');
   let t=editId?byId(editId):null;
-  if(t){Object.assign(t,{text,to,due,time,prio:fPrio})}
+  if(t){const canEdit=t.by===me||isAdmin();const oldDue=t.due||'';
+    if(canEdit)Object.assign(t,{text,to,due,time,prio:fPrio});else Object.assign(t,{due,time});
+    if((t.due||'')!==oldDue&&t.by&&t.by!==me){const why=($('fWhy')&&$('fWhy').value||'').trim();if(!why){Object.assign(t,{due:oldDue});toast('Укажите причину переноса срока');$('fWhy').focus();return}
+      t.notes.push({d:new Date().toISOString(),t:'Срок перенесён с '+(oldDue?fmt(oldDue):'—')+' на '+(t.due?fmt(t.due):'—')+'. Причина: '+why,by:me})}}
   else{t={id:Date.now(),text,by:me,to,due,time,rep:'',wdays:[],link:'',prio:fPrio,notes:[],steps:[],done:false,created:today()};tasks.push(t)}
-  t.upd=Date.now();closeSheet();render();
+  touch(t);closeSheet();render();
   if(await push(t))toast(editId?'Сохранено':'Задача поставлена');editId=null}
 
 /* ---------- прочее ---------- */
