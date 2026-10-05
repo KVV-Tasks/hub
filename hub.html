@@ -495,7 +495,7 @@ kbd{border:1px solid var(--line);padding:1px 6px;font-size:10px;color:var(--neon
           <input id="cPass" type="password" placeholder="Пароль" autocomplete="current-password" style="flex:1;min-width:120px" onkeydown="if(event.key==='Enter')cloudLogin()">
           <button class="btn sm" id="cBtn" onclick="cloudLogin()">Войти</button>
         </div>
-        <div class="hint">Логин и пароль выдаёт администратор. После входа задачи, заказчики, ссылки и шаблоны хранятся в общей базе: их видят коллеги с компьютеров и телефонов, изменения приходят сразу. Сотрудник видит задачи, где он исполнитель или автор; руководитель — все. Без связи панель работает как обычно и дошлёт изменения, когда связь появится.</div>
+        <div class="hint">Логин и пароль выдаёт администратор. После входа задачи, заказчики, ссылки и шаблоны хранятся в общей базе и доступны с компьютеров и телефонов, изменения приходят сразу. Задачу видят тот, кто её завёл, и исполнители из базы; руководитель видит ещё все поручения. Личная задача (себе, без исполнителя или исполнителю не из базы, отмечена 🔒) видна только вам — на компьютере и телефоне. «От кого» — просто подпись. Заказчики и шаблоны общие, ссылки у каждого свои. Без связи панель работает как обычно и дошлёт изменения, когда связь появится.</div>
       </div>
       <div id="cUserBox" hidden>
         <div class="row wrap" style="align-items:center">
@@ -636,10 +636,14 @@ function seedSeen(){if(seenMap)return;seenMap={};tasks.forEach(t=>seenMap[String
 /* ============ data ============ */
 function norm(t){const o=Object.assign({due:'',time:'',rep:'',wdays:[],prio:0,link:'',notes:[],steps:[],done:false},t);
   if(o.by===undefined||o.to===undefined){const f=o.from||'';if(o.dir==='out'){if(o.by===undefined)o.by=me();if(o.to===undefined)o.to=f}else{if(o.by===undefined)o.by=f;if(o.to===undefined)o.to=me()}}
-  delete o.from;delete o.dir;o.by=o.by||'';o.to=o.to||'';if(!Array.isArray(o.steps))o.steps=[];if(!o.due)o.due='';if(!o.upd)o.upd=o.id||0;if(!Array.isArray(o.notes))o.notes=[];if(!Array.isArray(o.wdays))o.wdays=[];if(!o.created)o.created=today();return o}
+  delete o.from;delete o.dir;o.by=o.by||'';o.to=o.to||'';if(!Array.isArray(o.steps))o.steps=[];if(!o.due)o.due='';if(!o.upd)o.upd=o.id||0;if(!Array.isArray(o.notes))o.notes=[];if(!Array.isArray(o.wdays))o.wdays=[];if(!o.created){const d=new Date();o.created=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}return o} // не today(): norm зовётся при загрузке раньше, чем объявлена today
 function rel(t){const m=me(),by=t.by||'',to=t.to||'';const L=toList(to);if(L.includes(m)&&!(by===m&&L.length>1))return {dir:'in',from:by,to};if(by===m)return {dir:'out',from:to,to};return {dir:'other',from:by,to}}
 function whoStr(t){const r=rel(t);if(r.dir==='in')return r.from?'от: '+r.from:'';if(r.dir==='out')return 'кому: '+(r.to||'—');return (r.from?'от: '+r.from+' ':'')+'кому: '+(r.to||'—')}
 function inScope(t){const m=me();if(!m||S.scope==='all')return true;return hasTo(t,m)||t.by===m}
+/* в общей базе автор задачи — тот, кто её завёл (t.own), а «от кого» (t.by) — только подпись */
+const isOwn=t=>{const u=typeof cloud!=='undefined'&&cloud.user?cloud.user.id:null;if(u&&t.own)return t.own===u;return !t.by||t.by===me()};
+/* личная: кроме автора, из людей базы в задаче никого — её видит только автор */
+const isPersonal=t=>{if(typeof cloud==='undefined'||!cloud.user)return false;const o=t.own||cloud.user.id;return toList(t.to).map(cloudUid).filter(Boolean).every(u=>u===o)};
 function setScope(x){S.scope=x;saveS();updScope();render()}
 function updScope(){const m=me();$('scopeSeg').hidden=!m;document.querySelectorAll('#scopeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.s===(S.scope||'mine')));$('meTag').hidden=!m;$('meTag').textContent='👤 '+m}
 let tasks=[],contacts=[],links=[],timers=[],notepad='',trash=[],templates=[];
@@ -667,7 +671,7 @@ let undoStack=[],lastSnap=null,lastLocalChange=0;
 const snap=()=>JSON.stringify({tasks,trash});
 let noDueNote=false;
 function dueNotes(o){if(noDueNote||(o&&o.noUndo)||!lastSnap)return;try{const m=me();if(!m)return;const prev=new Map(JSON.parse(lastSnap).tasks.map(t=>[t.id,t.due||'']));
-  tasks.forEach(t=>{if(!prev.has(t.id))return;const od=prev.get(t.id);if((t.due||'')!==od&&t.by&&t.by!==m){const why=(prompt('Причина переноса срока задачи «'+t.text.slice(0,60)+'» (обязательно):','')||'').trim();
+  tasks.forEach(t=>{if(!prev.has(t.id))return;const od=prev.get(t.id);if((t.due||'')!==od&&!isOwn(t)){const why=(prompt('Причина переноса срока задачи «'+t.text.slice(0,60)+'» (обязательно):','')||'').trim();
     if(!why){t.due=od;touch(t);toast('Перенос отменён: не указана причина');return}
     (t.notes=t.notes||[]).push({d:new Date().toISOString(),t:'Срок перенесён с '+(od?fmt(od):'—')+' на '+(t.due?fmt(t.due):'—')+'. Причина: '+why,by:m});t.updBy=m}})}catch(e){}}
 function save(o){dueNotes(o);const cur=snap();if(!(o&&o.noUndo)&&lastSnap!==null&&lastSnap!==cur){undoStack.push(lastSnap);if(undoStack.length>30)undoStack.shift()}lastSnap=cur;lastLocalChange=Date.now();
@@ -722,7 +726,7 @@ $('fDue').addEventListener('change',()=>{touched.due=true;offCheck()});$('fTime'
 function noDue(){$('fDue').value='';$('fTime').value='';touched.due=true;touched.time=true;offCheck();toast('Срок снят — задача без срока')}
 function tplApply(id){const x=templates.find(x=>x.id===id);if(!x)return;$('fText').value=x.text||'';$('fFrom').value=x.from||'';setPrio(document.querySelector('#fPrio button[data-p="'+(x.prio||0)+'"]'));setRepVal(x.rep||'');setWd(x.wdays||[]);setDir(document.querySelector('#fDir button[data-d="'+(x.dir||'in')+'"]'));$('fLink').value=x.link||'';toggleLinkField(!!x.link);touched.from=true;$('tplPick').classList.remove('open');$('fText').focus()}
 function tplSave(){const text=$('fText').value.trim();if(!text){toast('Заполните текст задачи — он станет шаблоном');$('fText').focus();return}templates.push({id:Date.now(),name:text.slice(0,40),text,from:$('fFrom').value.trim(),prio:getPrio(),rep:getRep(),wdays:getRep()==='wd'?getWd():[],dir:getDir(),link:$('fLink').value.trim(),upd:Date.now()});save();renderTpl();toast('Шаблон сохранён')}
-function tplDel(id){templates=templates.filter(x=>x.id!==id);save();renderTpl()}
+function tplDel(id){if(!canShared(templates.find(x=>x.id===id)))return;templates=templates.filter(x=>x.id!==id);save();renderTpl()}
 function renderTpl(){$('tplList').innerHTML=(templates.length?templates.map(x=>`<div class="srow"><button onclick="tplApply(${x.id})">${esc(x.name)}<i>${x.from?esc(x.from):''}</i></button><span class="star" onclick="tplDel(${x.id})" title="Удалить шаблон">✖</span></div>`).join(''):'<div class="foot">Шаблонов нет</div>')+`<div class="foot"><button class="sl" onclick="tplSave()">＋ сохранить текущую форму как шаблон</button></div>`}
 $('tplPick').addEventListener('click',e=>{if(e.target.closest('.list'))return;$('tplPick').classList.toggle('open')});
 document.addEventListener('click',e=>{if(!e.target.closest('#tplPick'))$('tplPick').classList.remove('open')});
@@ -745,15 +749,16 @@ function submitForm(){
   if(rep==='wd'&&!wdays.length){toast('Отметьте дни недели для повтора');return}
   if(rep&&!due){toast('Для повтора нужен срок');$('fDue').focus();return}
   const m=me();let by,to;if(dir==='out'){by=m;to=[from,...extraTo].filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i).join(', ')}else{by=from;to=editKeepTo!==null?editKeepTo:m}
-  if(cloud.user&&dir==='out'&&toList(to).some(n=>!cloudUid(n)))cloudProfiles().then(()=>{const bad=toList(to).filter(n=>!cloudUid(n));if(bad.length)showErr('⚠ Нет в команде: '+bad.join(', ')+'. Задача записана, но этим людям не видна — исправьте имя как в базе');else cloudPush()});
-  if(editId){const t=byId(editId);if(t){if(cloud.user&&cloud.role!=='admin'&&t.by&&t.by!==m){Object.assign(t,{due,time});toast('Чужая задача: изменены только срок и время')}else{Object.assign(t,{text,by,to,due,time,rep,wdays,link,prio});toast('Задача обновлена')}touch(t)}}
-  else{tasks.unshift(norm({id:Date.now(),updBy:me(),text,by,to,due,time,rep,wdays,link,prio,done:false,created:today(),upd:Date.now()}));toast('Записано')}
+  if(cloud.user&&dir==='out'&&toList(to).some(n=>!cloudUid(n)))cloudProfiles().then(()=>{const L=toList(to),bad=L.filter(n=>!cloudUid(n));if(!bad.length){cloudPush();return}
+    toast(bad.length===L.length?'🔒 '+bad.join(', ')+' — нет в базе. Задача личная: её видите только вы':bad.join(', ')+' — нет в базе, им задача не видна')});
+  if(editId){const t=byId(editId);if(t){if(cloud.user&&cloud.role!=='admin'&&!isOwn(t)){Object.assign(t,{due,time});toast('Чужая задача: изменены только срок и время')}else{Object.assign(t,{text,by,to,due,time,rep,wdays,link,prio});toast('Задача обновлена')}touch(t)}}
+  else{tasks.unshift(norm({id:Date.now(),updBy:me(),text,by,to,due,time,rep,wdays,link,prio,done:false,created:today(),upd:Date.now(),own:cloud.user?cloud.user.id:undefined}));toast('Записано')}
   save();resetForm();render();$('fText').focus();
 }
 function resetForm(){editId=null;editKeepTo=null;extraTo=[];$('fText').readOnly=false;$('fFrom').readOnly=false;renderToChips();$('fToAdd').value='';$('fText').value='';$('fFrom').value='';$('fTime').value='';$('fLink').value='';$('fDue').value=today();renderTpl();$('phint').textContent='';setRepVal('');
   touched={due:false,time:false,from:false};setWd([]);repChanged();toggleLinkField(false);setDir(document.querySelector('#fDir button[data-d="in"]'));
   setPrio(document.querySelector('#fPrio button[data-p="0"]'));$('fTitle').textContent='Новая задача';$('fSubmit').textContent='▶ Записать';$('fCancel').hidden=true;offCheck()}
-function edit(id){const t=byId(id);if(!t)return;editId=id;const r=rel(t);const lim=!!(cloud.user&&cloud.role!=='admin'&&t.by&&t.by!==me());$('fText').readOnly=lim;$('fFrom').readOnly=lim;if(lim)toast('Задача от '+t.by+': можно изменить только срок и время');editKeepTo=r.dir==='other'?t.to:null;$('fText').value=t.text;if(r.dir==='out'){const L=toList(t.to);$('fFrom').value=L[0]||'';extraTo=L.slice(1)}else{$('fFrom').value=r.from;extraTo=[]}renderToChips();$('fDue').value=t.due;$('fTime').value=t.time||'';setRepVal(t.rep||'');$('fLink').value=t.link||'';
+function edit(id){const t=byId(id);if(!t)return;editId=id;const r=rel(t);const lim=!!(cloud.user&&cloud.role!=='admin'&&!isOwn(t));$('fText').readOnly=lim;$('fFrom').readOnly=lim;if(lim)toast('Задача от '+(cloudName(t.own)||t.by)+': можно изменить только срок и время');editKeepTo=r.dir==='other'?t.to:null;$('fText').value=t.text;if(r.dir==='out'){const L=toList(t.to);$('fFrom').value=L[0]||'';extraTo=L.slice(1)}else{$('fFrom').value=r.from;extraTo=[]}renderToChips();$('fDue').value=t.due;$('fTime').value=t.time||'';setRepVal(t.rep||'');$('fLink').value=t.link||'';
   touched={due:true,time:true,from:true};setWd(t.wdays||[]);repChanged();toggleLinkField(!!t.link);setDir(document.querySelector('#fDir button[data-d="'+(r.dir==='out'?'out':'in')+'"]'));
   setPrio(document.querySelector('#fPrio button[data-p="'+(t.prio||0)+'"]'));$('fTitle').textContent='Правка задачи';$('fSubmit').textContent='✔ Сохранить';$('fCancel').hidden=false;$('phint').textContent='';offCheck();$('fText').focus()}
 $('fText').addEventListener('keydown',e=>{if(e.ctrlKey&&e.key==='Enter')submitForm()});
@@ -815,17 +820,25 @@ function toggleVoice(){
 /* ============ list actions ============ */
 function setFilter(b){document.querySelectorAll('.filters > button').forEach(x=>x.classList.remove('on'));b.classList.add('on');filter=b.dataset.f;render()}
 function toggleOpen(id){openId=openId===id?null:id;if(openId){const t=byId(id);if(t)markSeen(t)}render();if(openId){const i=document.getElementById('note-'+id);if(i)i.focus()}}
-function markDone(t){t.done=true;t.doneAt=today();t.doneBy=me();touch(t);if(t.rep&&!t.spawned){const nd=nextDueT(t);if(nd){t.spawned=true;tasks.unshift(norm({id:Date.now()+Math.floor(Math.random()*1000),text:t.text,by:t.by,to:t.to,due:nd,time:t.time,rep:t.rep,wdays:t.wdays,prio:t.prio,link:t.link,steps:(t.steps||[]).map(s=>({t:s.t,done:false})),done:false,created:today(),upd:Date.now(),series:t.series||t.id}))}}}
+function markDone(t){t.done=true;t.doneAt=today();t.doneBy=me();touch(t);if(t.rep&&!t.spawned){const nd=nextDueT(t);if(nd){t.spawned=true;tasks.unshift(norm({id:Date.now()+Math.floor(Math.random()*1000),own:t.own,text:t.text,by:t.by,to:t.to,due:nd,time:t.time,rep:t.rep,wdays:t.wdays,prio:t.prio,link:t.link,steps:(t.steps||[]).map(s=>({t:s.t,done:false})),done:false,created:today(),upd:Date.now(),series:t.series||t.id}))}}}
 function toggleDone(id){const t=byId(id);if(t.done){t.done=false;t.doneAt=null;t.doneBy=null;touch(t)}else markDone(t);save();render()}
 function addStep(id){const i=document.getElementById('step-'+id);let v=(i.value||'').trim();if(!v)return;const t=byId(id);const s={t:v,done:false};const md=v.match(/^(.*?)\s+до\s+(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\s*$/i);if(md){v=md[1].trim();const y=md[4]||String(new Date().getFullYear());s.due=y+'-'+md[3].padStart(2,'0')+'-'+md[2].padStart(2,'0')}
-  const mm=v.match(/^(.*?)\s*@\s*([^@]+?)\s*$/);if(mm&&mm[1].trim()){s.t=mm[1].trim();s.to=mm[2].trim()}else s.t=v;s.by=me();t.steps.push(s);touch(t);save();render();const j=document.getElementById('step-'+id);if(j)j.focus()}
+  const mm=v.match(/^(.*?)\s*@\s*([^@]+?)\s*$/);if(mm&&mm[1].trim()){s.t=mm[1].trim();s.to=mm[2].trim()}else s.t=v;s.by=me();
+  // шаг виден только тем, кто видит задачу: ответственного из базы, которого нет в задаче, предлагаем добавить в исполнители
+  const su=cloud.user&&s.to?cloudUid(s.to):null;
+  if(su&&su!==(t.own||cloud.user.id)&&!toList(t.to).map(cloudUid).includes(su)){
+    if(cloud.role!=='admin'&&!isOwn(t))toast(s.to+' не исполнитель этой задачи и шаг не увидит. Добавить исполнителя может автор задачи');
+    else if(confirm(s.to+' не исполнитель этой задачи и шаг не увидит.\nДобавить в исполнители?'+(isPersonal(t)?' Задача перестанет быть личной: её увидят '+s.to+(cloud.role==='admin'?'.':' и руководитель.'):'')))t.to=[...toList(t.to),cloudName(su)].join(', ')}
+  t.steps.push(s);touch(t);save();render();const j=document.getElementById('step-'+id);if(j)j.focus()}
 function toggleStep(id,k){const t=byId(id);const s=t.steps[k];s.done=!s.done;if(s.done){s.doneBy=me();s.doneAt=today()}else{delete s.doneBy;delete s.doneAt}touch(t);save();render()}
 function delStep(id,k){const t=byId(id);t.steps.splice(k,1);touch(t);save();render()}
 function searchTag(tag){$('q').value='#'+tag;render()}
 function taskText(t){return ['ЗАДАЧА: '+t.text,'Срок: '+fmt(t.due)+(t.time?' '+t.time:''),whoStr(t),t.done?'Выполнено: '+fmt(t.doneAt||t.due)+(t.doneBy?' ('+t.doneBy+')':''):'',t.prio?'Приоритет: '+PRIO[t.prio]:'',t.link?'Ссылка: '+t.link:'',...(t.steps.length?['Чек-лист:',...t.steps.map(s=>' ['+(s.done?'x':' ')+'] '+s.t)]:[]),...(t.notes.length?['Заметки:',...t.notes.map(n=>' '+fmtDT(n.d)+' '+n.t)]:[])].filter(Boolean).join('\n')}
 function copyTask(id){copyText(taskText(byId(id))).then(()=>toast('Задача скопирована как текст'))}
 function toTrash(t){t.deletedAt=Date.now();t.deletedBy=me();trash.push(t);tasks=tasks.filter(x=>x.id!==t.id);if(openId===t.id)openId=null;if(editId===t.id)resetForm();selected.delete(t.id)}
-function canDel(t){const strict=S.strict||(cloud.user&&cloud.role!=='admin');if(strict&&me()&&t.by&&t.by!==me()){toast('Удалить может только автор: '+t.by+(cloud.user?' или руководитель':''));return false}return true}
+function canDel(t){const strict=S.strict||(cloud.user&&cloud.role!=='admin');if(strict&&me()&&!isOwn(t)){toast('Удалить может только автор: '+((cloud.user&&cloudName(t.own))||t.by)+(cloud.user?' или руководитель':''));return false}return true}
+/* общие заказчики и шаблоны: менять и удалять — тот, кто завёл, или руководитель */
+function canShared(x){if(!cloud.user||cloud.role==='admin'||!x||!x.own||x.own===cloud.user.id)return true;toast('Заведено: '+(cloudName(x.own)||'коллегой')+'. Изменить или удалить может автор или руководитель');return false}
 function del(id){const t=byId(id);if(!t)return;if(!canDel(t))return;toTrash(t);save();render();toast('Задача в корзине',{label:'ОТМЕНИТЬ',fn:undo})}
 function restoreTask(id){const t=trash.find(x=>x.id===id);if(!t)return;trash=trash.filter(x=>x.id!==id);delete t.deletedAt;touch(t);tasks.unshift(norm(t));save();render();toast('Восстановлено')}
 function purgeTrash(id){if(id){if(!confirm('Удалить навсегда?'))return;trash=trash.filter(x=>x.id!==id)}else{if(!confirm('Очистить корзину ('+trash.length+')?'))return;trash=[]}save();render()}
@@ -857,7 +870,7 @@ function taskHtml(t){
     <div class="bar"></div>
     <div class="main">
       <div class="text" onclick="toggleOpen(${t.id})">${selMode?`<input type="checkbox" class="selbox" ${selected.has(t.id)?'checked':''} onclick="event.stopPropagation();toggleSel(${t.id})">`:''}${isNew(t)?'<span class="pb nw">НОВОЕ</span>':''}${r.dir==='out'?'<span class="pb wait">ЖДУ</span>':r.dir==='other'?`<span class="pb to">→ ${esc(r.to||'—')}</span>`:''}${t.prio?`<span class="pb pr">${PRIO[t.prio]}</span>`:''}${esc(t.text).replace(/#([\p{L}\d_\-]+)/gu,(m,g)=>`<span class="tag" onclick="event.stopPropagation();searchTag('${g.toLowerCase()}')">#${g}</span>`)}</div>
-      <div class="meta">${r.dir==='other'?`<span>ОТ: <b>${esc(r.from||'—')}</b></span><span>КОМУ: <b>${esc(r.to||'—')}</b>${phone(r.to)}</span>`:`<span>${r.dir==='out'?'КОМУ':'ОТ'}: <b>${esc(r.from||'—')}</b>${phone(r.from)}</span>`}<span>СОЗДАНО: ${fmt(t.created)}</span>${t.done?`<span>✔ ${fmt(t.doneAt||t.due)}${t.doneBy?' · '+esc(t.doneBy):''}</span>`:''}${t.rep?`<span class="rep">↻ ${repText(t)}</span>`:''}${t.notes.length?`<span>✎ ЗАМЕТОК: ${t.notes.length}</span>`:''}${t.steps.length?`<span>☑ ${t.steps.filter(s=>s.done).length}/${t.steps.length}${(()=>{const my=t.steps.filter(s=>s.to===me());if(!my.length||my.length===t.steps.length)return '';return ' · МОИ '+my.filter(s=>s.done).length+'/'+my.length})()}</span>`:''}${t.link?`<span class="lnk" onclick="openLink(${t.id})" title="${esc(t.link)}">🔗 ОТКРЫТЬ</span>`:''}</div>
+      <div class="meta">${isPersonal(t)?'<span title="Личная задача: её видите только вы">🔒</span>':''}${r.dir==='other'?`<span>ОТ: <b>${esc(r.from||'—')}</b></span><span>КОМУ: <b>${esc(r.to||'—')}</b>${phone(r.to)}</span>`:`<span>${r.dir==='out'?'КОМУ':'ОТ'}: <b>${esc(r.from||'—')}</b>${phone(r.from)}</span>`}<span>СОЗДАНО: ${fmt(t.created)}</span>${t.done?`<span>✔ ${fmt(t.doneAt||t.due)}${t.doneBy?' · '+esc(t.doneBy):''}</span>`:''}${t.rep?`<span class="rep">↻ ${repText(t)}</span>`:''}${t.notes.length?`<span>✎ ЗАМЕТОК: ${t.notes.length}</span>`:''}${t.steps.length?`<span>☑ ${t.steps.filter(s=>s.done).length}/${t.steps.length}${(()=>{const my=t.steps.filter(s=>s.to===me());if(!my.length||my.length===t.steps.length)return '';return ' · МОИ '+my.filter(s=>s.done).length+'/'+my.length})()}</span>`:''}${t.link?`<span class="lnk" onclick="openLink(${t.id})" title="${esc(t.link)}">🔗 ОТКРЫТЬ</span>`:''}</div>
       ${open?`<div class="detail">
         ${t.link?`<div class="lrow">🔗 <span>${esc(t.link)}</span><button onclick="openLink(${t.id})">ОТКРЫТЬ</button><button onclick="copyLink(${t.id})">КОПИРОВАТЬ</button></div>`:''}
         <div class="notes">${t.notes.length?t.notes.map((n,k)=>`<div><i>${fmtDT(n.d)}${n.by?' · '+esc(n.by):''}</i>${esc(n.t)} <i style="float:right;cursor:pointer" title="Удалить заметку" onclick="delNote(${t.id},${k})">✖</i></div>`).join(''):'<div class="none">Заметок нет. Запишите, что сделано или что ответили.</div>'}</div>
@@ -998,8 +1011,8 @@ function saveContact(){const name=$('cName').value.trim(),phone=$('cPhone').valu
   if(cEdit){const c=contacts.find(c=>c.id===cEdit);const old=c.name;Object.assign(c,{name,phone,role,upd:Date.now()});if(old!==name)tasks.forEach(t=>{let c=false;if(t.by===old){t.by=name;c=true}if(t.to===old){t.to=name;c=true}if(c)touch(t)})}
   else{if(contacts.some(c=>c.name===name)){toast('Такой уже есть');return}contacts.push({id:Date.now(),name,phone,role,upd:Date.now()})}
   save();resetContact();renderContacts();render()}
-function editContact(id){const c=contacts.find(c=>c.id===id);cEdit=id;$('cName').value=c.name;$('cPhone').value=c.phone||'';$('cRole').value=c.role||'';$('cSave').textContent='✔';$('cCancel').hidden=false;$('cName').focus()}
-function delContact(id){const c=contacts.find(c=>c.id===id);if(!confirm('Удалить «'+c.name+'» из справочника? Задачи останутся.'))return;contacts=contacts.filter(x=>x.id!==id);save();renderContacts();render()}
+function editContact(id){const c=contacts.find(c=>c.id===id);if(!canShared(c))return;cEdit=id;$('cName').value=c.name;$('cPhone').value=c.phone||'';$('cRole').value=c.role||'';$('cSave').textContent='✔';$('cCancel').hidden=false;$('cName').focus()}
+function delContact(id){const c=contacts.find(c=>c.id===id);if(!canShared(c))return;if(!confirm('Удалить «'+c.name+'» из справочника? Задачи останутся.'))return;contacts=contacts.filter(x=>x.id!==id);save();renderContacts();render()}
 function showPerson(n){closeContacts();$('q').value=n;const b=document.querySelector('.filters button[data-f="active"]');setFilter(b)}
 function renderContacts(){
   const names=new Set(contacts.map(c=>c.name));
@@ -1118,19 +1131,25 @@ async function detachFile(){if(!fileHandle){toast('Файл не привяза�
 const SB_URL='https://zuzwmewauxdwtuiohyxu.supabase.co';
 const SB_KEY='sb_publishable_XrR2pTflcMcjii2-l887hw_S24uGVSX';
 const SB_DOMAIN='hub.local'; // логин без @ дополняется этим доменом
-var cloud={sb:null,user:null,name:'',role:'',profiles:[],state:'off',pushed:{},pushedS:{},chan:null,timer:null,busy:false,err:''};
+var cloud={sb:null,user:null,name:'',role:'',profiles:[],state:'off',pushed:{},pushedS:{},chan:null,timer:null,busy:false,loading:false,lastLoad:0,ownChanged:false,err:''};
 try{cloud.pushed=JSON.parse(LS.get('hub.cloud.pushed')||'{}');cloud.pushedS=JSON.parse(LS.get('hub.cloud.pushedS')||'{}')}catch(e){}
 const cloudOn=()=>cloud.state==='ok';
 const cloudName=uid=>{const p=cloud.profiles.find(p=>p.id===uid);return p?p.name:''};
 const cloudUid=name=>{name=(name||'').trim().toLowerCase();if(!name)return null;const p=cloud.profiles.find(p=>p.name.trim().toLowerCase()===name);return p?p.id:null};
 const cloudId=id=>/^\d+$/.test(String(id))?Number(id):String(id);
-function cloudRowToTask(r){const d=Object.assign({},r.data||{});d.id=cloudId(r.id);d.done=!!r.done;d.upd=Number(r.upd)||0;
-  const b=cloudName(r.by_uid);if(b)d.by=b;const names=(Array.isArray(r.to_uids)&&r.to_uids.length?r.to_uids:(r.to_uid?[r.to_uid]:[])).map(cloudName).filter(Boolean);if(names.length)d.to=names.join(', ');
+/* by_uid — кто завёл задачу (определяет, кто её видит), data.by — подпись «от кого». byOwn: подпись и есть автор */
+function cloudRowToTask(r){const d=Object.assign({},r.data||{});d.id=cloudId(r.id);d.done=!!r.done;d.upd=Number(r.upd)||0;d.own=r.by_uid||null;
+  const b=cloudName(r.by_uid);if(b&&d.by&&(d.byOwn||d.by===b))d.by=b;delete d.byOwn; // автора могли переименовать
+  const names=(Array.isArray(r.to_uids)&&r.to_uids.length?r.to_uids:(r.to_uid?[r.to_uid]:[])).map(cloudName).filter(Boolean);
+  if(names.length)d.to=[...new Set([...names,...toList(d.to).filter(n=>!cloudUid(n))])].join(', '); // люди из базы + подписи не из базы
   if(r.deleted_at){d.deletedAt=Number(r.deleted_at)}else delete d.deletedAt;return d}
-function cloudTaskToRow(t,deletedAt){const d=Object.assign({},t);delete d.deletedAt;
-  const uids=toList(t.to).map(cloudUid).filter(Boolean);
-  return {id:String(t.id),by_uid:cloudUid(t.by),to_uid:uids[0]||null,to_uids:uids,done:!!t.done,upd:deletedAt?Math.max(t.upd||0,deletedAt):(t.upd||0),deleted_at:deletedAt||null,data:d}}
-function cloudSharedRow(kind,x,deletedAt){return {id:kind+':'+x.id,kind,upd:deletedAt?Math.max(x.upd||0,deletedAt):(x.upd||0),deleted_at:deletedAt||null,data:x}}
+function cloudTaskToRow(t,deletedAt){const d=Object.assign({},t);delete d.deletedAt;delete d.own;delete d.byOwn;
+  const own=t.own!==undefined?t.own:cloud.user.id;const on=cloudName(own);if(d.by&&on&&d.by===on)d.byOwn=true;
+  const uids=[...new Set(toList(t.to).map(cloudUid).filter(Boolean))];
+  return {id:String(t.id),by_uid:own,to_uid:uids[0]||null,to_uids:uids,done:!!t.done,upd:deletedAt?Math.max(t.upd||0,deletedAt):(t.upd||0),deleted_at:deletedAt||null,data:d}}
+function cloudSharedRow(kind,x,deletedAt){const d=Object.assign({},x);delete d.own;return {id:kind+':'+x.id,kind,upd:deletedAt?Math.max(x.upd||0,deletedAt):(x.upd||0),deleted_at:deletedAt||null,data:d}}
+/* вся таблица порциями: база отдаёт за раз не больше 1000 строк */
+async function cloudAll(table){const out=[],N=1000;for(let from=0;;){const {data,error}=await cloud.sb.from(table).select('*').order('id').range(from,from+N-1);if(error)throw error;const k=(data||[]).length;out.push(...(data||[]));if(k<N)break;from+=k}return out}
 function cloudSavePushed(){LS.set('hub.cloud.pushed',JSON.stringify(cloud.pushed));LS.set('hub.cloud.pushedS',JSON.stringify(cloud.pushedS))}
 
 async function cloudInit(){
@@ -1142,7 +1161,10 @@ async function cloudInit(){
   renderStorage();renderSettings();
   window.addEventListener('online',()=>{if(cloud.user)cloudLoad()});
   setInterval(()=>{if(cloudOn()&&LS.get('hub.cloud.dirty')==='1')cloudPushNow()},60000);
-  setInterval(()=>{if(cloud.user)cloudProfiles().then(()=>{renderSettings();render()})},300000);
+  // полная сверка раз в 10 минут и при возвращении на вкладку: живые обновления не сообщают,
+  // что задачу у вас забрали (переназначили), — такие уберутся при сверке
+  setInterval(()=>{if(cloud.user&&!document.hidden)cloudLoad().then(()=>render())},600000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&cloud.user&&Date.now()-cloud.lastLoad>300000)cloudLoad().then(()=>render())});
 }
 async function cloudLogin(){
   let login=($('cLogin').value||'').trim(),pass=$('cPass').value||'';
@@ -1161,33 +1183,63 @@ function cloudReset(){if(cloud.chan){try{cloud.sb.removeChannel(cloud.chan)}catc
 async function cloudProfiles(){try{const pr=await cloud.sb.from('profiles').select('id,name,role');if(pr.error)return false;cloud.profiles=pr.data||[];
   const meP=cloud.profiles.find(p=>p.id===cloud.user.id);if(meP){cloud.name=meP.name;cloud.role=meP.role;if(S.me!==cloud.name){S.me=cloud.name;saveS()}}return true}catch(e){return false}}
 async function cloudLoad(){
+  if(cloud.loading)return;cloud.loading=true;
   try{
     const sb=cloud.sb;
     const pr=await sb.from('profiles').select('id,name,role');if(pr.error)throw pr.error;cloud.profiles=pr.data||[];
     const meP=cloud.profiles.find(p=>p.id===cloud.user.id);cloud.name=meP?meP.name:(cloud.user.email||'').split('@')[0];cloud.role=meP?meP.role:'member';
     if(S.me!==cloud.name){S.me=cloud.name;saveS()}
-    const tr=await sb.from('tasks').select('*');if(tr.error)throw tr.error;
-    const sr=await sb.from('shared').select('*');if(sr.error)throw sr.error;
+    const tr=await cloudAll('tasks'),sr=await cloudAll('shared');
     const before=new Set(tasks.map(t=>t.id));
-    const n=cloudApply(tr.data||[],sr.data||[]);seedSeen();
-    cloud.state='ok';cloud.err='';
-    if(n>0){LS.set(KEY,JSON.stringify(tasks));LS.set(EXTRA,JSON.stringify(extraObj()));lastSnap=snap();render();toast('Из общей базы: '+n+' изм.');cloudNotifyNew(before)}
+    const n=cloudApply(tr,sr);seedSeen();
+    const gone=await cloudSweep(tr,sr);cloudSavePushed();
+    cloud.state='ok';cloud.err='';cloud.lastLoad=Date.now();
+    if(n>0||gone>0||cloud.ownChanged){cloud.ownChanged=false;LS.set(KEY,JSON.stringify(tasks));LS.set(EXTRA,JSON.stringify(extraObj()));lastSnap=snap();render();if(gone){renderTools();renderTpl()}
+      if(n>0){toast('Из общей базы: '+n+' изм.');cloudNotifyNew(before)}}
     cloudSubscribe();
     await cloudPushNow(); // всё, что новее базы (или ещё не отправлялось), уходит в базу
   }catch(e){cloud.state=cloud.user?'error':'off';cloud.err=e.message||String(e);showErr('Общая база: '+cloud.err)}
-  renderStorage();renderSettings()}
+  cloud.loading=false;renderStorage();renderSettings()}
 
 function cloudApply(taskRows,sharedRows){
   const live=[],tomb=[];
   taskRows.forEach(r=>{const t=cloudRowToTask(r);cloud.pushed[String(r.id)]=Number(r.upd)||0;(t.deletedAt?tomb:live).push(t)});
   const bundle={tasks:live,trash:tomb,contacts:[],links:[],templates:[]};
   let removed=0;
-  sharedRows.forEach(r=>{if(r.deleted_at)delete cloud.pushedS[r.id];else cloud.pushedS[r.id]=Number(r.upd)||0;const x=Object.assign({},r.data||{});x.upd=Number(r.upd)||0;
+  sharedRows.forEach(r=>{if(r.deleted_at)delete cloud.pushedS[r.id];else cloud.pushedS[r.id]=Number(r.upd)||0;const x=Object.assign({},r.data||{});x.upd=Number(r.upd)||0;x.own=r.owner||null;
     const arr={contact:contacts,link:links,template:templates}[r.kind];if(!arr)return;
     if(r.deleted_at){const i=arr.findIndex(y=>String(y.id)===String(x.id));if(i>=0&&(arr[i].upd||0)<=Number(r.deleted_at)){arr.splice(i,1);removed++}return}
     ({contact:bundle.contacts,link:bundle.links,template:bundle.templates}[r.kind]).push(x)});
-  const n=applyBundle(bundle,'merge');cloudSavePushed();
+  const n=applyBundle(bundle,'merge');
+  // кто завёл — служебное поле базы: берём всегда, даже если сама запись у нас новее
+  const own=new Map(taskRows.map(r=>[String(r.id),r.by_uid||null]));
+  [...tasks,...trash].forEach(t=>{const k=String(t.id);if(own.has(k)&&t.own!==own.get(k)){t.own=own.get(k);cloud.ownChanged=true}});
+  const sown=new Map(sharedRows.map(r=>[r.id,r.owner||null]));
+  [['contact',contacts],['link',links],['template',templates]].forEach(([k,a])=>a.forEach(x=>{const id=k+':'+x.id;if(sown.has(id)&&x.own!==sown.get(id)){x.own=sown.get(id);cloud.ownChanged=true}}));
+  cloudSavePushed();
   return (n<0?0:n)+removed}
+
+/* Сверка после полной загрузки. Задачи и ссылки, которые есть в браузере, но база больше не показывает
+   (задачу переназначили, чужие личные), убираем из браузера — без удаления в базе.
+   То, чего в базе нет совсем (раньше не принималось), отправится заново. */
+async function cloudSweep(taskRows,sharedRows){
+  let gone=0;
+  const srv=new Set(taskRows.map(r=>String(r.id)));
+  const miss=[...new Set([...tasks,...trash].map(t=>String(t.id)))].filter(id=>!srv.has(id));
+  if(miss.length){const {data,error}=await cloud.sb.rpc('hidden_task_ids',{ids:miss});
+    if(!error){const hid=new Set(data||[]);
+      if(hid.size){const n0=tasks.length+trash.length;tasks=tasks.filter(t=>!hid.has(String(t.id)));trash=trash.filter(t=>!hid.has(String(t.id)));gone+=n0-tasks.length-trash.length;
+        if(openId!==null&&hid.has(String(openId)))openId=null;if(editId!==null&&hid.has(String(editId)))resetForm();hid.forEach(id=>selected.delete(cloudId(id)))}
+      miss.forEach(id=>delete cloud.pushed[id])}}
+  const ss=new Set(sharedRows.map(r=>r.id)),loc=[];
+  [['contact',contacts],['link',links],['template',templates]].forEach(([k,a])=>a.forEach(x=>loc.push(k+':'+x.id)));
+  const smiss=[...new Set([...loc,...Object.keys(cloud.pushedS)])].filter(id=>!ss.has(id));
+  if(smiss.length){const {data,error}=await cloud.sb.rpc('hidden_shared_ids',{ids:smiss});
+    if(!error){const hid=new Set(data||[]);
+      if(hid.size){const keep=k=>x=>!hid.has(k+':'+x.id);const n0=contacts.length+links.length+templates.length;
+        contacts=contacts.filter(keep('contact'));links=links.filter(keep('link'));templates=templates.filter(keep('template'));gone+=n0-contacts.length-links.length-templates.length}
+      smiss.forEach(id=>delete cloud.pushedS[id])}}
+  return gone}
 
 function cloudSubscribe(){
   if(cloud.chan)return;
@@ -1200,8 +1252,9 @@ function cloudOnChange(table,p){
   const before=new Set(tasks.map(t=>t.id));
   const oldT=table==='tasks'?(()=>{const t=byId(cloudId(r.id));return t?JSON.parse(JSON.stringify(t)):null})():null;
   const n=table==='tasks'?cloudApply([r],[]):cloudApply([],[r]);
-  if(n>0){LS.set(KEY,JSON.stringify(tasks));LS.set(EXTRA,JSON.stringify(extraObj()));lastSnap=snap();render();cloudNotifyNew(before);
-    if(oldT){const nt=byId(cloudId(r.id));if(nt)cloudNotifyChange(oldT,nt)}}}
+  if(n>0){cloud.ownChanged=false;LS.set(KEY,JSON.stringify(tasks));LS.set(EXTRA,JSON.stringify(extraObj()));lastSnap=snap();render();cloudNotifyNew(before);
+    if(oldT){const nt=byId(cloudId(r.id));if(nt)cloudNotifyChange(oldT,nt)}}
+  else if(cloud.ownChanged){cloud.ownChanged=false;LS.set(KEY,JSON.stringify(tasks));LS.set(EXTRA,JSON.stringify(extraObj()));render()}}
 /* что изменил другой человек в задаче, которую я вижу */
 function cloudNotifyChange(o,t){
   const who=t.updBy||'';if(!who||who===me())return;const name=(t.text||'').replace(/\s+/g,' ').slice(0,60);const tag='chg'+t.id;
@@ -1214,7 +1267,7 @@ function cloudNotifyChange(o,t){
     if(nd>od){const s=ns.find((s,k)=>s.done&&!(os[k]&&os[k].done));msg=[who+' закрыл шаг'+(nd===ns.length?' (все шаги готовы)':''),(s?s.t+' · ':'')+name]}
     else if(ns.length>os.length){const s=ns[ns.length-1];msg=s.to===me()?[who+' назначил вам шаг',s.t+(s.due?' · до '+fmt(s.due):'')+' · '+name]:[who+' добавил шаг',s.t+' · '+name]}}
   if(msg){notify(msg[0],msg[1],tag);if(S.sound)beep()}}
-function cloudNotifyNew(before){const m=me();if(!m)return;const nw=tasks.filter(t=>!before.has(t.id)&&!t.done&&hasTo(t,m)&&t.by!==m);
+function cloudNotifyNew(before){const m=me();if(!m)return;const nw=tasks.filter(t=>!before.has(t.id)&&!t.done&&hasTo(t,m)&&t.by!==m&&!(t.own&&t.own===cloud.user.id));
   nw.slice(0,5).forEach(t=>notify('📥 Новая задача'+(t.by?' от '+t.by:''),t.text+(t.due?' · до '+fmt(t.due)+(t.time?' '+t.time:''):''),'new'+t.id));if(nw.length&&S.sound)beep()}
 
 function cloudPush(){if(!cloud.user)return;LS.set('hub.cloud.dirty','1');clearTimeout(cloud.timer);cloud.timer=setTimeout(cloudPushNow,400)}
@@ -1223,7 +1276,7 @@ async function cloudPushNow(){
   try{
     const rows=[];
     const pend=tasks.filter(t=>(t.upd||0)>(cloud.pushed[String(t.id)]||0));
-    if(pend.some(t=>[...toList(t.to),t.by].some(n=>n&&!cloudUid(n))))await cloudProfiles(); // имя не найдено — возможно, людей переименовали
+    if(Date.now()-(cloud.profT||0)>60000&&pend.some(t=>toList(t.to).some(n=>!cloudUid(n)))){cloud.profT=Date.now();await cloudProfiles()} // имя не найдено — возможно, людей переименовали
     pend.forEach(t=>rows.push(cloudTaskToRow(t)));
     trash.forEach(d=>{const k=String(d.id);const u=Math.max(d.upd||0,d.deletedAt||0);if(u>(cloud.pushed[k]||0))rows.push(cloudTaskToRow(d,d.deletedAt||u))});
     const srows=[];const seen=new Set();
@@ -1233,10 +1286,15 @@ async function cloudPushNow(){
     // известные базе задачи — обновляем по одной (сотрудник вправе менять свои), новые — вставляем
     const fail=(r,e)=>{fails.push((r.data.text||r.id)+': '+(e.code==='42501'?'нет прав':e.message));if(e.code)cloud.pushed[r.id]=r.upd};
     const known=rows.filter(r=>cloud.pushed[r.id]!==undefined),fresh=rows.filter(r=>cloud.pushed[r.id]===undefined);
-    for(const r of known){const e=await cloud.sb.from('tasks').update(r).eq('id',r.id).select('id');if(e.error)fail(r,e.error);else cloud.pushed[r.id]=r.upd}
-    if(fresh.length){const {error}=await cloud.sb.from('tasks').insert(fresh);
-      if(error){for(const r of fresh){const e=await cloud.sb.from('tasks').insert(r);if(e.error){if(e.error.code==='23505')cloud.pushed[r.id]=r.upd;else fail(r,e.error)}else cloud.pushed[r.id]=r.upd}}
-      else fresh.forEach(r=>cloud.pushed[r.id]=r.upd)}
+    // обновлено 0 строк: в базе такой нет (раньше не приняли) или там версия новее — пробуем вставить
+    for(const r of known){const e=await cloud.sb.from('tasks').update(r).eq('id',r.id).select('id');if(e.error)fail(r,e.error);else if(e.data&&e.data.length)cloud.pushed[r.id]=r.upd;else fresh.push(r)}
+    let added=[];
+    if(fresh.length){const {data,error}=await cloud.sb.from('tasks').insert(fresh).select('id,by_uid');
+      if(error){for(const r of fresh){const e=await cloud.sb.from('tasks').insert(r).select('id,by_uid');if(e.error){if(e.error.code==='23505')cloud.pushed[r.id]=r.upd;else fail(r,e.error)}else{cloud.pushed[r.id]=r.upd;added.push(...(e.data||[]))}}}
+      else{fresh.forEach(r=>cloud.pushed[r.id]=r.upd);added=data||[]}}
+    if(added.length){added.forEach(x=>{const t=byId(cloudId(x.id))||trash.find(d=>String(d.id)===String(x.id));if(t)t.own=x.by_uid});LS.set(KEY,JSON.stringify(tasks));LS.set(EXTRA,JSON.stringify(extraObj()));
+      const live=added.map(x=>byId(cloudId(x.id))).filter(Boolean);
+      if(live.length>=5){const pers=live.filter(isPersonal).length;toast('Поднято в общую базу: '+live.length+' задач'+(pers?', из них личных (видите только вы): '+pers:''));render()}}
     if(srows.length){const {error}=await cloud.sb.from('shared').upsert(srows);
       if(error){for(const r of srows){const e=await cloud.sb.from('shared').upsert(r);if(e.error)fails.push(r.id+': '+e.error.message);else{if(r.deleted_at)delete cloud.pushedS[r.id];else cloud.pushedS[r.id]=r.upd}}}
       else srows.forEach(r=>{if(r.deleted_at)delete cloud.pushedS[r.id];else cloud.pushedS[r.id]=r.upd})}
@@ -1273,7 +1331,10 @@ function exportJson(){const blob=new Blob([JSON.stringify(bundle(),null,1)],{typ
 let impData=null;
 function importPick(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();
   r.onload=()=>{try{const d=JSON.parse(r.result);const arr=Array.isArray(d)?d:d.tasks;if(!Array.isArray(arr))throw 0;impData=d;
-    const box=$('impBox');box.hidden=false;box.innerHTML=`Найдено задач: <b>${arr.length}</b>${!Array.isArray(d)&&d.contacts?', заказчиков: <b>'+d.contacts.length+'</b>':''} &nbsp; <button class="btn sm" onclick="doImport('merge')">Объединить с текущими</button> <button class="btn sm" onclick="doImport('replace')">Заменить все</button> <button class="btn sm ghost" onclick="impCancel()">Отмена</button>`}
+    // в общей базе: сколько задач останутся личными, а сколько уйдут исполнителям из базы
+    let cl='';if(cloud.user){const ppl={};let pers=0;arr.map(norm).forEach(t=>{const u=[...new Set(toList(t.to).map(cloudUid).filter(x=>x&&x!==cloud.user.id))];if(!u.length)pers++;else u.forEach(x=>{const n=cloudName(x);ppl[n]=(ppl[n]||0)+1})});
+      cl=`<br>В общую базу: личных (видите только вы) — <b>${pers}</b>`+(Object.keys(ppl).length?`; поручений — ${Object.entries(ppl).map(([n,c])=>esc(n)+': <b>'+c+'</b>').join(', ')} (их увидят исполнители${cloud.role==='admin'?'':' и руководитель'})`:'')+'<br>'}
+    const box=$('impBox');box.hidden=false;box.innerHTML=`Найдено задач: <b>${arr.length}</b>${!Array.isArray(d)&&d.contacts?', заказчиков: <b>'+d.contacts.length+'</b>':''}${cl} &nbsp; <button class="btn sm" onclick="doImport('merge')">Объединить с текущими</button> <button class="btn sm" onclick="doImport('replace')">Заменить все</button> <button class="btn sm ghost" onclick="impCancel()">Отмена</button>`}
     catch(e){showErr('Файл не похож на копию данных HUB')}};
   r.readAsText(f);inp.value=''}
 function impCancel(){impData=null;$('impBox').hidden=true}
