@@ -81,6 +81,7 @@ main{padding:10px 12px calc(90px + env(safe-area-inset-bottom))}
 .toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#1f2937;color:var(--txt);padding:10px 16px;border-radius:10px;font-size:14px;z-index:20;box-shadow:0 4px 16px rgba(0,0,0,.5);max-width:92vw}
 .menu{position:absolute;right:10px;top:calc(46px + env(safe-area-inset-top));background:var(--pan);border:1px solid var(--line);border-radius:12px;overflow:hidden;z-index:7;min-width:220px}
 .menu button{display:block;width:100%;text-align:left;border:none;border-radius:0;border-bottom:1px solid var(--line);padding:12px 14px}
+a.pri{flex:1;display:block;text-align:center;text-decoration:none;border-radius:10px;padding:12px 14px;background:var(--acc);color:#04111a;font-weight:600}
 </style>
 </head>
 <body>
@@ -107,6 +108,7 @@ main{padding:10px 12px calc(90px + env(safe-area-inset-bottom))}
   </header>
   <div class="menu hidden" id="menu">
     <button onclick="askNotif()">🔔 Включить уведомления</button>
+    <button id="mTg" class="hidden" onclick="openTg()">📨 Уведомления в Telegram</button>
     <button onclick="markAllSeen()">👁 Снять метки «новое»</button>
     <button onclick="reload()">↻ Обновить</button>
     <button onclick="logout()">⎋ Выйти</button>
@@ -196,8 +198,8 @@ async function login(){
   if(error){$('lErr').textContent=/invalid/i.test(error.message)?'Неверный логин или пароль':error.message;return}
   user=data.user;$('lPass').value='';await start();
 }
-async function logout(){$('menu').classList.add('hidden');if(!confirm('Выйти?'))return;if(chan){sb.removeChannel(chan);chan=null}await sb.auth.signOut();user=null;tasks=[];$('app').classList.add('hidden');$('login').classList.remove('hidden')}
-async function start(){$('login').classList.add('hidden');$('app').classList.remove('hidden');await load();subscribe()}
+async function logout(){$('menu').classList.add('hidden');if(!confirm('Выйти?'))return;if(chan){sb.removeChannel(chan);chan=null}await sb.auth.signOut();user=null;tasks=[];tgSt=null;tgUrl='';$('mTg').classList.add('hidden');$('app').classList.add('hidden');$('login').classList.remove('hidden')}
+async function start(){$('login').classList.add('hidden');$('app').classList.remove('hidden');await load();subscribe();tgStatus()}
 
 /* ---------- данные ---------- */
 async function load(){
@@ -309,7 +311,7 @@ function openTask(id){const t=byId(id);if(!t)return;openId=t.id;markSeen(t);
     <div class="row"><button class="${t.done?'':'pri'}" onclick="toggleDone('${esc(t.id)}');openTask('${esc(t.id)}')">${t.done?'↩ Вернуть в работу':'✓ Сделано'}</button><button onclick="openForm('${esc(t.id)}')">✎ Изменить</button></div>
     ${mine?`<div class="row"><button class="danger ghost" onclick="delTask('${esc(t.id)}')">🗑 Удалить задачу</button></div>`:''}`;
   $('sheet').classList.remove('hidden');render()}
-function closeSheet(){$('sheet').classList.add('hidden');openId=null;editId=null}
+function closeSheet(){$('sheet').classList.add('hidden');openId=null;editId=null;tgOpen=false}
 async function stepToggle(i,v){const t=byId(openId);if(!t||!t.steps[i])return;const s=t.steps[i];s.done=v;if(v){s.doneBy=me;s.doneAt=today()}else{delete s.doneBy;delete s.doneAt}touch(t);render();if(await push(t))openTask(t.id)}
 async function addStep(){const t=byId(openId);const v=($('stepIn').value||'').trim();if(!t||!v)return;const sel=$('stepTo'),sd=$('stepDue');const s={t:v,done:false,by:me};if(sel&&sel.value)s.to=sel.value;if(sd&&sd.value)s.due=sd.value;t.steps.push(s);touch(t);if(await push(t)){render();openTask(t.id);setTimeout(()=>$('stepIn').focus(),50)}}
 async function addNote(){const t=byId(openId);const v=($('noteIn').value||'').trim();if(!t||!v)return;t.notes.push({d:new Date().toISOString(),t:v,by:me});touch(t);if(await push(t)){render();openTask(t.id)}}
@@ -350,6 +352,25 @@ async function saveForm(){
   else{t={id:Date.now(),own:user.id,text,by:me,to,due,time,rep:'',wdays:[],link:'',prio:fPrio,notes:[],steps:[],done:false,created:today()};tasks.push(t)}
   touch(t);closeSheet();render();
   if(await push(t))toast(editId?'Сохранено':'Задача поставлена');editId=null}
+
+/* ---------- Telegram (13_telegram.sql): здесь только привязка, сообщения шлёт сама база ---------- */
+let tgSt=null,tgUrl='',tgOpen=false,tgTimer=null;
+async function tgStatus(){try{const {data,error}=await sb.rpc('tg_status');tgSt=error?null:data}catch(e){tgSt=null}
+  $('mTg').classList.toggle('hidden',!(tgSt&&tgSt.bot));if(tgSt&&tgSt.linked)tgUrl='';return tgSt}
+async function openTg(){$('menu').classList.add('hidden');await tgStatus();tgOpen=true;renderTg();$('sheet').classList.remove('hidden')}
+function renderTg(){if(!tgOpen)return;const s=tgSt||{},on=!!s.linked;
+  $('sheetBody').innerHTML=`<h2><span>Уведомления в Telegram</span><button class="ghost" onclick="closeSheet()">✕</button></h2>
+    <div class="d-meta">${on?'<span style="color:var(--ok)">✓ Подключено</span>'+(s.name?' · '+esc(s.name):''):tgUrl?'Ждём нажатия «Запустить» в боте…':'Не подключено'}</div>
+    <div class="note" style="border:0;color:var(--dim)">Приходят: вам поставили задачу или назначили шаг, задачу закрыли или вернули в работу, перенесли срок; по будням в 9:00 — сводка на день. Сообщения приходят, даже когда HUB закрыт. По личным задачам сообщений нет.</div>
+    ${on?`<div class="row"><button class="danger ghost" onclick="tgUnlink()">Отключить</button></div>`
+      :tgUrl?`<div class="row"><a class="pri" href="${esc(tgUrl)}" target="_blank" rel="noopener">Открыть Telegram</a></div><div class="note" style="border:0;color:var(--dim)">В боте нажмите «Запустить» (Start) и вернитесь сюда. Ссылка действует 30 минут.</div>`
+      :`<div class="row"><button class="pri" onclick="tgLink()">Подключить Telegram</button></div>`}`}
+async function tgLink(){const {data,error}=await sb.rpc('tg_link');if(error||!data||!data.url){toast('Telegram: '+(error?error.message:'бот не настроен'));return}
+  tgUrl=data.url;renderTg();tgPoll(Date.now()+10*60000)}
+function tgPoll(until){clearTimeout(tgTimer);if(Date.now()>until||!tgUrl)return;
+  tgTimer=setTimeout(async()=>{const s=await tgStatus();if(s&&s.linked){renderTg();toast('Telegram подключён')}else tgPoll(until)},4000)}
+async function tgUnlink(){if(!confirm('Отключить уведомления в Telegram?'))return;const {error}=await sb.rpc('tg_unlink');if(error){toast('Telegram: '+error.message);return}
+  await tgStatus();renderTg();toast('Telegram отключён')}
 
 /* ---------- прочее ---------- */
 function toggleMenu(){$('menu').classList.toggle('hidden')}
